@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String     @id @default(uuid())
+  name              String
+  email             String     @unique
+  role              String     @default("OPERATOR") // OPERATOR, ADMIN
+  avatar            String?
+  createdAt         DateTime   @default(now())
+  assignedCustomers Customer[]
+}
+
+model Customer {
+  id                 String          @id @default(uuid())
+  phone              String          @unique
+  name               String?
+  conversationState  String          @default("BOT_ACTIVE") // BOT_ACTIVE, PENDING, IN_ATTENTION, CLOSED
+  botStep            String          @default("STEP_1_WELCOME") // STEP_1_WELCOME, STEP_2_PROFILES, BOT_COMPLETED
+  profileTag         String?         // Mayorista, Minorista, Soporte
+  assignedOperatorId String?
+  assignedOperator   User?           @relation(fields: [assignedOperatorId], references: [id])
+  messages           Message[]
+  tags               TagOnCustomer[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model Message {
+  id            String   @id @default(uuid())
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  senderType    String   // CUSTOMER, BOT, OPERATOR
+  operatorName  String?  // Nombre del operador si lo envió un humano
+  text          String
+  status        String   @default("SENT") // SENT, DELIVERED, READ, FAILED
+  metaMessageId String?
+  createdAt     DateTime @default(now())
+}
+
+model Tag {
+  id        String          @id @default(uuid())
+  name      String          @unique
+  color     String          @default("#3B82F6")
+  customers TagOnCustomer[]
+}
+
+model TagOnCustomer {
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, tagId])
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  category    String
+  description String
+  price       Float
+  stock       Int      @default(100)
+  createdAt   DateTime @default(now())
+}

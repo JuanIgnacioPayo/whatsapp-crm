@@ -1,0 +1,22 @@
+# Entorno y Credenciales Sensibles
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# Base de Datos Local
+prisma/*.db
+prisma/*.db-journal
+dev.db
+
+# Dependencias y Builds
+node_modules/
+dist/
+build/
+.cache/
+
+# Registros y Archivos Temporales
+*.log
+tunnel_url.txt
+cloudflare_url.txt

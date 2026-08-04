@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRM WhatsApp Cloud API - Multioperador</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: {
+            waDark: '#111827',
+            waSidebar: '#1F2937',
+            waChatBg: '#0F172A',
+            waBubbleOut: '#059669',
+            waBubbleIn: '#374151',
+            waAccent: '#10B981'
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Socket.io Client -->
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <!-- React & React-DOM UMD -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- Babel Standalone for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #4B5563; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #6B7280; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans antialiased overflow-hidden">
+  <div id="root"></div>
+
+  <!-- App React Source -->
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
