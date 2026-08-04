@@ -217,7 +217,9 @@ function App() {
           </div>
           <div>
             <h1 className="font-semibold text-sm leading-tight text-emerald-400">WhatsApp CRM Multioperador</h1>
-            <p className="text-xs text-gray-400">Meta Cloud API Native</p>
+            <p className="text-xs text-gray-400">
+              {metadata.whatsappNumber ? `📞 ${metadata.whatsappNumber}` : metadata.phoneNumberId ? `🆔 Teléfono: ${metadata.phoneNumberId}` : 'Meta Cloud API Native'}
+            </p>
           </div>
         </div>
 

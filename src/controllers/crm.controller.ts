@@ -199,7 +199,12 @@ export async function getMetadata(req: Request, res: Response) {
   try {
     const operators = await prisma.user.findMany({ orderBy: { name: 'asc' } });
     const tags = await prisma.tag.findMany({ orderBy: { name: 'asc' } });
-    return res.json({ operators, tags });
+    return res.json({
+      operators,
+      tags,
+      whatsappNumber: process.env.META_PHONE_NUMBER || null,
+      phoneNumberId: process.env.META_PHONE_NUMBER_ID || null
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
