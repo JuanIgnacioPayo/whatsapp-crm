@@ -227,19 +227,36 @@ function App() {
   }, [user, userProfile]);
 
   // 3. Efecto: Escuchar listado de usuarios (Sólo para Admins)
+  const [pendingUsersAlert, setPendingUsersAlert] = useState(false);
+  const prevPendingCountRef = useRef(0);
+
   useEffect(() => {
     if (!userProfile || userProfile.role !== 'admin') return;
 
-    const db = firebase.firestore();
-    const unsubscribe = db.collection('users').orderBy('createdAt', 'desc').onSnapshot((snap) => {
-      const usersList = [];
-      snap.forEach(doc => {
-        usersList.push(doc.data());
-      });
-      setAllUsers(usersList);
-    }, (err) => console.error("Error al listar usuarios:", err));
+    try {
+      const db = firebase.firestore();
+      const unsubscribe = db.collection('users').orderBy('createdAt', 'desc').onSnapshot((snap) => {
+        const usersList = [];
+        snap.forEach(doc => {
+          usersList.push(doc.data());
+        });
+        setAllUsers(usersList);
 
-    return () => unsubscribe();
+        // Detectar nuevos usuarios pendientes de aprobación
+        const pendingCount = usersList.filter(u => !u.active).length;
+        if (pendingCount > prevPendingCountRef.current && prevPendingCountRef.current >= 0) {
+          setPendingUsersAlert(true);
+          if (isSoundEnabled) {
+            playNotificationSound('bell', soundVolume);
+          }
+        }
+        prevPendingCountRef.current = pendingCount;
+      }, (err) => console.error("Error al listar usuarios:", err));
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("Error al escuchar usuarios en Firestore:", e);
+    }
   }, [userProfile]);
 
   // Web Audio API Synthesizer (Notificaciones Sonoras de alta fidelidad)
@@ -986,6 +1003,29 @@ function App() {
           </div>
         </div>
       </header>
+
+      {/* BANNER DE ALERTA: Usuarios Pendientes de Aprobación */}
+      {userProfile?.role === 'admin' && allUsers.filter(u => !u.active).length > 0 && (
+        <div className="bg-amber-900/90 border-b border-amber-700 px-4 py-2.5 flex items-center justify-between animate-pulse">
+          <div className="flex items-center space-x-3">
+            <span className="text-lg">🔔</span>
+            <div>
+              <span className="text-xs font-bold text-amber-200">
+                {allUsers.filter(u => !u.active).length} usuario(s) esperando aprobación
+              </span>
+              <span className="text-[10px] text-amber-300/80 ml-2">
+                ({allUsers.filter(u => !u.active).map(u => u.displayName || u.email).join(', ')})
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => { setCurrentView('admin'); setPendingUsersAlert(false); }}
+            className="bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold px-4 py-1.5 rounded-lg transition shadow"
+          >
+            👥 Revisar Solicitudes
+          </button>
+        </div>
+      )}
 
       {/* 2. AREA CONTENIDO PRINCIPAL */}
       {currentView === 'admin' && userProfile?.role === 'admin' ? (
