@@ -180,34 +180,39 @@ function App() {
 
     if (!user || !userProfile || !userProfile.active) return;
 
-    // Si estamos corriendo localmente, podemos usar directamente localhost
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      setDynamicApiBase('http://localhost:3000/api');
-      setDynamicSocketUrl('http://localhost:3000');
+    // Si el servidor Express está sirviendo la aplicación (localhost, Render, Railway, VPS, etc.)
+    const origin = window.location.origin;
+    if (origin && !origin.includes('firebaseapp.com') && !origin.includes('web.app')) {
+      setDynamicApiBase(`${origin}/api`);
+      setDynamicSocketUrl(origin);
       return;
     }
 
-    // Si estamos en hosting de producción, leemos el túnel desde Firestore en tiempo real
-    const db = firebase.firestore();
-    const docRef = db.collection('config').doc('backend');
+    // Si la App está alojada en un hosting estático independiente (ej. Firebase Hosting), leemos el túnel desde Firestore
+    try {
+      const db = firebase.firestore();
+      const docRef = db.collection('config').doc('backend');
 
-    const unsubscribe = docRef.onSnapshot((doc) => {
-      if (doc.exists) {
-        const data = doc.data();
-        if (data.url) {
-          const baseUrl = data.url.replace('/webhook', '');
-          setDynamicApiBase(`${baseUrl}/api`);
-          setDynamicSocketUrl(baseUrl);
-          console.log("🔗 Conectando dinámicamente al backend en:", baseUrl);
+      const unsubscribe = docRef.onSnapshot((doc) => {
+        if (doc.exists) {
+          const data = doc.data();
+          if (data.url) {
+            const baseUrl = data.url.replace('/webhook', '');
+            setDynamicApiBase(`${baseUrl}/api`);
+            setDynamicSocketUrl(baseUrl);
+            console.log("🔗 Conectando dinámicamente al backend en:", baseUrl);
+          }
+        } else {
+          console.warn("⚠️ No se encontró la URL del backend activa en Firestore.");
         }
-      } else {
-        console.warn("⚠️ No se encontró la URL del backend activa en Firestore.");
-      }
-    }, (err) => {
-      console.error("Error al obtener la URL del backend:", err);
-    });
+      }, (err) => {
+        console.error("Error al obtener la URL del backend:", err);
+      });
 
-    return () => unsubscribe();
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("Error al inicializar Firestore para backend dinámico:", e);
+    }
   }, [user, userProfile]);
 
   // 3. Efecto: Escuchar listado de usuarios (Sólo para Admins)
