@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Verificar si el usuario está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Obtener los datos del perfil del usuario autenticado
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Verificar si el usuario está activo y aprobado
+    function isActive() {
+      return isAuthenticated() && getUserData().active == true;
+    }
+    
+    // Verificar si el usuario tiene rol de Administrador
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
+
+    // Configuración del Backend (URL del Túnel): Cualquier usuario autenticado puede leerla
+    match /config/backend {
+      allow read: if isAuthenticated();
+      allow write: if false; // El backend (Admin SDK) es el único con acceso de escritura
+    }
+
+    // Colección de Usuarios
+    match /users/{userId} {
+      // Un usuario autenticado puede leer y crear su propio documento de perfil
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Los administradores pueden hacer cualquier operación (leer, listar, actualizar, borrar) en todos los perfiles
+      allow read, write: if isAdmin();
+    }
+  }
+}
