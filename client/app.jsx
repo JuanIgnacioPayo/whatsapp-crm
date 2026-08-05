@@ -151,6 +151,20 @@ function App() {
     }
   };
 
+  // Reiniciar Bot Automático
+  const handleResetBot = async () => {
+    if (!selectedCustomerId) return;
+    try {
+      await fetch(`${API_BASE}/customers/${selectedCustomerId}/reset-bot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      fetchCustomers();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Toggle Etiqueta del cliente
   const handleToggleTag = async (tagName) => {
     if (!selectedCustomerId) return;
@@ -372,6 +386,13 @@ function App() {
 
                 {/* Acciones de Estado del Chat */}
                 <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleResetBot}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded font-medium shadow"
+                  >
+                    🤖 Reiniciar Bot
+                  </button>
+
                   {selectedCustomer.conversationState === 'PENDING' && (
                     <button
                       onClick={() => handleUpdateState('IN_ATTENTION')}

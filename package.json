@@ -12,6 +12,7 @@
     "prisma:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.15.0",
     "@prisma/client": "^5.10.2",
     "axios": "^1.6.7",
     "cors": "^2.8.5",

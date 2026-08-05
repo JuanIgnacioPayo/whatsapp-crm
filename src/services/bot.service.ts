@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { sendWhatsAppMessage } from './whatsapp.service';
 import { emitNewMessage, emitCustomerUpdate } from './socket.service';
-
+import { processWithLLM } from './llm.service';
 const prisma = new PrismaClient();
 
 export async function handleIncomingMessage(phone: string, incomingText: string, name?: string) {
@@ -52,55 +52,29 @@ export async function handleIncomingMessage(phone: string, incomingText: string,
 }
 
 async function processBotStateMachine(customer: any, text: string) {
-  const cleanText = text.trim().toLowerCase();
+  // Obtener historial reciente para dar contexto al LLM (últimos 10 mensajes)
+  const history = await prisma.message.findMany({
+    where: { customerId: customer.id },
+    orderBy: { createdAt: 'desc' },
+    take: 10
+  });
+  
+  // El LLM necesita el historial ordenado cronológicamente (ascendente)
+  // Como lo trajimos desc (para limitar a los últimos 10), le damos la vuelta.
+  // IMPORTANTE: quitamos el mensaje recién guardado (el último en desc) para no pasarlo duplicado,
+  // ya que processWithLLM lo agrega manualmente.
+  const sortedHistory = history.reverse().slice(0, -1);
 
-  // STEP 1: Bienvenida y Primera Pregunta de Perfilado
-  if (customer.botStep === 'STEP_1_WELCOME') {
-    const welcomeText = 
-      `¡Hola ${customer.name || ''}! 👋 Bienvenido a nuestro canal de atención.\n\n` +
-      `Para derivarte con el sector correcto, por favor indica qué tipo de cliente eres:\n` +
-      `1️⃣ Mayorista 🏭\n` +
-      `2️⃣ Minorista 🛒\n` +
-      `3️⃣ Soporte Técnico 🛠️\n\n` +
-      `Responde únicamente con el número o nombre de tu opción.`;
+  // Llamar al LLM
+  const response = await processWithLLM(sortedHistory, text);
 
-    await sendWhatsAppMessage(customer.phone, welcomeText);
-
-    // Guardar mensaje del Bot en BD
-    const botMsg = await prisma.message.create({
-      data: {
-        customerId: customer.id,
-        senderType: 'BOT',
-        text: welcomeText,
-        status: 'SENT'
-      }
-    });
-    emitNewMessage(botMsg);
-
-    // Avanzar paso del bot
-    const updatedCustomer = await prisma.customer.update({
-      where: { id: customer.id },
-      data: { botStep: 'STEP_2_PROFILES' },
-      include: { tags: { include: { tag: true } } }
-    });
-    emitCustomerUpdate(updatedCustomer);
-    return;
-  }
-
-  // STEP 2: Captura del perfil, asignación de etiqueta y traspaso a Humano
-  if (customer.botStep === 'STEP_2_PROFILES') {
-    let profileTag = 'Minorista';
-
-    if (cleanText.includes('1') || cleanText.includes('mayorista')) {
-      profileTag = 'Mayorista';
-    } else if (cleanText.includes('3') || cleanText.includes('soporte')) {
-      profileTag = 'Soporte';
-    }
+  if (response.type === 'TOOL_CALL' && response.tool === 'transfer_to_agent') {
+    const { department, summary } = response.args;
 
     // Buscar o Vincular etiqueta en la BD
-    let tag = await prisma.tag.findUnique({ where: { name: profileTag } });
+    let tag = await prisma.tag.findUnique({ where: { name: department } });
     if (!tag) {
-      tag = await prisma.tag.create({ data: { name: profileTag, color: '#3B82F6' } });
+      tag = await prisma.tag.create({ data: { name: department, color: '#3B82F6' } });
     }
 
     // Vincular TagOnCustomer
@@ -110,35 +84,46 @@ async function processBotStateMachine(customer: any, text: string) {
       update: {}
     });
 
-    const completionText = 
-      `¡Entendido! Te hemos clasificado como **${profileTag}**.\n\n` +
-      `🤖 He desconectado el bot automático. Tu chat ha ingresado a la cola de atención de nuestros operadores.\n` +
-      `En un momento uno de nuestros asesores responderá a este hilo. ¡Gracias por la paciencia!`;
+    // Enviar mensaje de cierre por WhatsApp
+    await sendWhatsAppMessage(customer.phone, response.text);
 
-    await sendWhatsAppMessage(customer.phone, completionText);
-
+    // Guardar mensaje del bot
     const botMsg = await prisma.message.create({
       data: {
         customerId: customer.id,
         senderType: 'BOT',
-        text: completionText,
+        text: response.text,
         status: 'SENT'
       }
     });
     emitNewMessage(botMsg);
 
-    // Actualizar cliente: Desconectar bot y pasar estado a PENDING (cola humana)
+    // Actualizar cliente: Desconectar bot, pasar a PENDING y guardar perfil
     const finalCustomer = await prisma.customer.update({
       where: { id: customer.id },
       data: {
-        profileTag,
+        profileTag: department,
         conversationState: 'PENDING',
-        botStep: 'BOT_COMPLETED'
+        botStep: 'BOT_COMPLETED' // Indicamos que el bot terminó su ciclo
       },
       include: { tags: { include: { tag: true } } }
     });
 
     // Evento en tiempo real: Se habilita para la cola de atención del CRM
     emitCustomerUpdate(finalCustomer);
+  } else {
+    // Si no es un tool call, es una respuesta de texto normal
+    await sendWhatsAppMessage(customer.phone, response.text);
+
+    // Guardar respuesta del bot en BD
+    const botMsg = await prisma.message.create({
+      data: {
+        customerId: customer.id,
+        senderType: 'BOT',
+        text: response.text,
+        status: 'SENT'
+      }
+    });
+    emitNewMessage(botMsg);
   }
 }

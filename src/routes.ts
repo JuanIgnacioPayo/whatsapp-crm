@@ -7,7 +7,8 @@ import {
   updateCustomerState,
   toggleCustomerTag,
   getProducts,
-  getMetadata
+  getMetadata,
+  resetBotState
 } from './controllers/crm.controller';
 
 const router = Router();
@@ -24,5 +25,6 @@ router.patch('/api/customers/:id/state', updateCustomerState);
 router.post('/api/customers/:id/tags', toggleCustomerTag);
 router.get('/api/products', getProducts);
 router.get('/api/metadata', getMetadata);
+router.post('/api/customers/:id/reset-bot', resetBotState);
 
 export default router;

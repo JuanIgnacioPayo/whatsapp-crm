@@ -209,3 +209,26 @@ export async function getMetadata(req: Request, res: Response) {
     return res.status(500).json({ error: error.message });
   }
 }
+
+// 8. Reiniciar Bot (Volver a BOT_ACTIVE)
+export async function resetBotState(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+
+    const updatedCustomer = await prisma.customer.update({
+      where: { id },
+      data: {
+        conversationState: 'BOT_ACTIVE',
+        botStep: 'STEP_1_WELCOME',
+        profileTag: null,
+        updatedAt: new Date()
+      },
+      include: { tags: { include: { tag: true } }, assignedOperator: true }
+    });
+
+    emitCustomerUpdate(updatedCustomer);
+    return res.json(updatedCustomer);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}

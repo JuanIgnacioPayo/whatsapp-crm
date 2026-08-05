@@ -20,3 +20,4 @@ build/
 *.log
 tunnel_url.txt
 cloudflare_url.txt
+scratch/
