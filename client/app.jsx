@@ -20,8 +20,13 @@ if (typeof firebase !== 'undefined' && isFirebaseConfigured) {
   }
 }
 
+// Configuración del correo del Administrador Principal (opcional)
+const PRIMARY_ADMIN_EMAIL = "";
+
 // Lógica de Registro Inicial en Firestore con Aprobación Estricta de Administrador
 const handleUserSetup = async (firebaseUser) => {
+  const userEmail = (firebaseUser.email || '').toLowerCase();
+
   try {
     const db = firebase.firestore();
     const userRef = db.collection('users').doc(firebaseUser.uid);
@@ -30,64 +35,59 @@ const handleUserSetup = async (firebaseUser) => {
     try {
       doc = await userRef.get();
     } catch (err) {
-      console.warn("Advertencia: No se pudo leer el documento de Firestore:", err.message);
-      // Fallback seguro: solo se activa automáticamente el dueño/primer usuario registrado en este equipo
-      const isOwner = localStorage.getItem('crm_owner_uid') === firebaseUser.uid || !localStorage.getItem('crm_has_admin');
-      if (isOwner) {
-        localStorage.setItem('crm_owner_uid', firebaseUser.uid);
-        localStorage.setItem('crm_has_admin', 'true');
-      }
+      console.warn("Advertencia: No se pudo consultar Firestore:", err.message);
+      // Fallback cuando Firestore esta inactivo:
+      // Si hay un email de admin explícito y coincide, o si es el primer email, permitir.
+      // De lo contrario, PENDIENTE DE APROBACIÓN (active: false).
+      const isPrimary = PRIMARY_ADMIN_EMAIL ? userEmail === PRIMARY_ADMIN_EMAIL.toLowerCase() : false;
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
-        role: isOwner ? 'admin' : 'operator',
-        active: isOwner ? true : false,
+        role: isPrimary ? 'admin' : 'operator',
+        active: isPrimary,
         createdAt: new Date().toISOString()
       };
     }
 
-    if (!doc.exists) {
-      let isFirstUser = false;
-      try {
-        const usersSnap = await db.collection('users').limit(1).get();
-        isFirstUser = usersSnap.empty && !localStorage.getItem('crm_has_admin');
-      } catch (e) {
-        isFirstUser = !localStorage.getItem('crm_has_admin');
-      }
-      
-      const newUser = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
-        role: isFirstUser ? 'admin' : 'operator',
-        active: isFirstUser ? true : false,
-        createdAt: new Date().toISOString()
-      };
-
-      if (isFirstUser) {
-        localStorage.setItem('crm_owner_uid', firebaseUser.uid);
-        localStorage.setItem('crm_has_admin', 'true');
-      }
-      
-      try {
-        await userRef.set(newUser);
-      } catch (writeErr) {
-        console.warn("Advertencia: No se pudo escribir en Firestore:", writeErr.message);
-      }
-      return newUser;
-    } else {
+    if (doc.exists) {
+      // El usuario YA existe en Firestore: devolver sus permisos reales guardados
       return doc.data();
     }
+
+    // El usuario NO existe aún en Firestore. Verificamos si es el PRIMER usuario absoluto del sistema.
+    let isFirstUserInDb = false;
+    try {
+      const usersSnap = await db.collection('users').get();
+      isFirstUserInDb = usersSnap.empty;
+    } catch (e) {
+      isFirstUserInDb = false;
+    }
+
+    const newUser = {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
+      role: isFirstUserInDb ? 'admin' : 'operator',
+      active: isFirstUserInDb ? true : false,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await userRef.set(newUser);
+    } catch (writeErr) {
+      console.warn("Advertencia: No se pudo guardar el perfil en Firestore:", writeErr.message);
+    }
+
+    return newUser;
   } catch (globalErr) {
     console.error("Error en handleUserSetup:", globalErr);
-    const isOwner = localStorage.getItem('crm_owner_uid') === firebaseUser.uid;
     return {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
       displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
-      role: isOwner ? 'admin' : 'operator',
-      active: isOwner ? true : false
+      role: 'operator',
+      active: false
     };
   }
 };
