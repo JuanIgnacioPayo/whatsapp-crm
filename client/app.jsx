@@ -20,7 +20,7 @@ if (typeof firebase !== 'undefined' && isFirebaseConfigured) {
   }
 }
 
-// Lógica de Registro Inicial en Firestore con Fallback Resiliente
+// Lógica de Registro Inicial en Firestore con Aprobación Estricta de Administrador
 const handleUserSetup = async (firebaseUser) => {
   try {
     const db = firebase.firestore();
@@ -31,24 +31,29 @@ const handleUserSetup = async (firebaseUser) => {
       doc = await userRef.get();
     } catch (err) {
       console.warn("Advertencia: No se pudo leer el documento de Firestore:", err.message);
-      // Fallback: Permite el ingreso activo si Firestore aun no esta creado o falla la conexion
+      // Fallback seguro: solo se activa automáticamente el dueño/primer usuario registrado en este equipo
+      const isOwner = localStorage.getItem('crm_owner_uid') === firebaseUser.uid || !localStorage.getItem('crm_has_admin');
+      if (isOwner) {
+        localStorage.setItem('crm_owner_uid', firebaseUser.uid);
+        localStorage.setItem('crm_has_admin', 'true');
+      }
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
-        role: 'admin',
-        active: true,
+        role: isOwner ? 'admin' : 'operator',
+        active: isOwner ? true : false,
         createdAt: new Date().toISOString()
       };
     }
 
     if (!doc.exists) {
-      let isFirstUser = true;
+      let isFirstUser = false;
       try {
         const usersSnap = await db.collection('users').limit(1).get();
-        isFirstUser = usersSnap.empty;
+        isFirstUser = usersSnap.empty && !localStorage.getItem('crm_has_admin');
       } catch (e) {
-        isFirstUser = true;
+        isFirstUser = !localStorage.getItem('crm_has_admin');
       }
       
       const newUser = {
@@ -59,6 +64,11 @@ const handleUserSetup = async (firebaseUser) => {
         active: isFirstUser ? true : false,
         createdAt: new Date().toISOString()
       };
+
+      if (isFirstUser) {
+        localStorage.setItem('crm_owner_uid', firebaseUser.uid);
+        localStorage.setItem('crm_has_admin', 'true');
+      }
       
       try {
         await userRef.set(newUser);
@@ -71,12 +81,13 @@ const handleUserSetup = async (firebaseUser) => {
     }
   } catch (globalErr) {
     console.error("Error en handleUserSetup:", globalErr);
+    const isOwner = localStorage.getItem('crm_owner_uid') === firebaseUser.uid;
     return {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
       displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
-      role: 'admin',
-      active: true
+      role: isOwner ? 'admin' : 'operator',
+      active: isOwner ? true : false
     };
   }
 };
