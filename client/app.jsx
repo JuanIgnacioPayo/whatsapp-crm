@@ -20,12 +20,13 @@ if (typeof firebase !== 'undefined' && isFirebaseConfigured) {
   }
 }
 
-// Configuración del correo del Administrador Principal (opcional)
-const PRIMARY_ADMIN_EMAIL = "";
+// Configuración del correo del Administrador Principal
+const PRIMARY_ADMIN_EMAIL = "elpatiodesalcedo@gmail.com";
 
 // Lógica de Registro Inicial en Firestore con Aprobación Estricta de Administrador
 const handleUserSetup = async (firebaseUser) => {
   const userEmail = (firebaseUser.email || '').toLowerCase();
+  const isPrimaryAdmin = userEmail === PRIMARY_ADMIN_EMAIL.toLowerCase();
 
   try {
     const db = firebase.firestore();
@@ -36,40 +37,32 @@ const handleUserSetup = async (firebaseUser) => {
       doc = await userRef.get();
     } catch (err) {
       console.warn("Advertencia: No se pudo consultar Firestore:", err.message);
-      // Fallback cuando Firestore esta inactivo:
-      // Si hay un email de admin explícito y coincide, o si es el primer email, permitir.
-      // De lo contrario, PENDIENTE DE APROBACIÓN (active: false).
-      const isPrimary = PRIMARY_ADMIN_EMAIL ? userEmail === PRIMARY_ADMIN_EMAIL.toLowerCase() : false;
       return {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
-        role: isPrimary ? 'admin' : 'operator',
-        active: isPrimary,
+        role: isPrimaryAdmin ? 'admin' : 'operator',
+        active: isPrimaryAdmin ? true : false,
         createdAt: new Date().toISOString()
       };
     }
 
     if (doc.exists) {
-      // El usuario YA existe en Firestore: devolver sus permisos reales guardados
-      return doc.data();
+      const data = doc.data();
+      if (isPrimaryAdmin) {
+        data.active = true;
+        data.role = 'admin';
+      }
+      return data;
     }
 
-    // El usuario NO existe aún en Firestore. Verificamos si es el PRIMER usuario absoluto del sistema.
-    let isFirstUserInDb = false;
-    try {
-      const usersSnap = await db.collection('users').get();
-      isFirstUserInDb = usersSnap.empty;
-    } catch (e) {
-      isFirstUserInDb = false;
-    }
-
+    // El usuario NO existe aún en Firestore.
     const newUser = {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
       displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
-      role: isFirstUserInDb ? 'admin' : 'operator',
-      active: isFirstUserInDb ? true : false,
+      role: isPrimaryAdmin ? 'admin' : 'operator',
+      active: isPrimaryAdmin ? true : false,
       createdAt: new Date().toISOString()
     };
 
@@ -86,8 +79,8 @@ const handleUserSetup = async (firebaseUser) => {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
       displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
-      role: 'operator',
-      active: false
+      role: isPrimaryAdmin ? 'admin' : 'operator',
+      active: isPrimaryAdmin ? true : false
     };
   }
 };
