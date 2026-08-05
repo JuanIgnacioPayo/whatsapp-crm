@@ -12,7 +12,6 @@ dev.db
 
 # Dependencias y Builds
 node_modules/
-dist/
 build/
 .cache/
 
