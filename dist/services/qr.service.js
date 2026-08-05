@@ -64,7 +64,10 @@ async function initBaileysEngine() {
             auth: state,
             printQRInTerminal: true,
             logger: (0, pino_1.default)({ level: 'silent' }),
-            browser: ['CRM WhatsApp', 'Chrome', '1.0.0']
+            browser: ['CRM WhatsApp', 'Chrome', '1.0.0'],
+            qrTimeout: 60000,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000
         });
         sock.ev.on('creds.update', saveCreds);
         sock.ev.on('connection.update', async (update) => {
@@ -77,7 +80,7 @@ async function initBaileysEngine() {
                     connectedUser = null;
                     try {
                         const io = (0, socket_service_1.getIO)();
-                        io.emit('qr_code', { qr: currentQrDataUrl, connected: false });
+                        io.emit('qr_code', { qr: currentQrDataUrl, connected: false, ttl: 60 });
                     }
                     catch (e) { }
                 }
@@ -239,6 +242,7 @@ function getWhatsAppStatus() {
         connected: isConnected,
         qr: currentQrDataUrl,
         user: connectedUser,
-        phone: connectedUser?.id ? connectedUser.id.split(':')[0] : null
+        phone: connectedUser?.id ? connectedUser.id.split(':')[0] : null,
+        ttl: 60
     };
 }

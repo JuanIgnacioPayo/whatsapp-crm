@@ -110,6 +110,7 @@ function App() {
   const [isQrConnected, setIsQrConnected] = useState(false);
   const [connectedPhone, setConnectedPhone] = useState(null);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [qrSecondsLeft, setQrSecondsLeft] = useState(60);
   const [isGlobalBotEnabled, setIsGlobalBotEnabled] = useState(false);
   
   // Estados de Notificaciones Auditivas
@@ -306,6 +307,7 @@ function App() {
     socket.on('qr_code', (data) => {
       setQrCodeData(data.qr);
       setIsQrConnected(data.connected);
+      setQrSecondsLeft(data.ttl || 60);
     });
 
     socket.on('whatsapp_status', (data) => {
@@ -349,14 +351,31 @@ function App() {
     return () => socket.disconnect();
   }, [dynamicApiBase]);
 
-  // 5. Efecto: Cargar mensajes de chat seleccionados
+  // 5. Temporizador de cuenta regresiva para la validez del Código QR
+  useEffect(() => {
+    if (!showQrModal || isQrConnected || !qrCodeData) return;
+
+    const interval = setInterval(() => {
+      setQrSecondsLeft((prev) => {
+        if (prev <= 1) {
+          fetchQrStatus();
+          return 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [showQrModal, isQrConnected, qrCodeData]);
+
+  // 6. Efecto: Cargar mensajes de chat seleccionados
   useEffect(() => {
     if (selectedCustomerId && dynamicApiBase) {
       fetchMessages(selectedCustomerId);
     }
   }, [selectedCustomerId, dynamicApiBase]);
 
-  // 6. Scroll automático del chat
+  // 7. Scroll automático del chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -366,7 +385,10 @@ function App() {
       const res = await fetch(`${dynamicApiBase}/qr`);
       const data = await res.json();
       setIsQrConnected(data.connected);
-      if (data.qr) setQrCodeData(data.qr);
+      if (data.qr) {
+        setQrCodeData(data.qr);
+        setQrSecondsLeft(data.ttl || 60);
+      }
       if (data.phone) setConnectedPhone(data.phone);
     } catch (e) {
       console.error(e);
@@ -1503,11 +1525,28 @@ function App() {
                 </p>
               </div>
             ) : qrCodeData ? (
-              <div className="space-y-3">
-                <div className="bg-white p-4 rounded-xl inline-block shadow-inner border border-gray-300">
+              <div className="space-y-4">
+                <div className="bg-white p-4 rounded-xl inline-block shadow-inner border border-gray-300 relative">
                   <img src={qrCodeData} alt="Código QR WhatsApp" className="w-56 h-56 mx-auto" />
                 </div>
-                <p className="text-[11px] text-amber-400 font-medium animate-pulse">
+
+                {/* Cuenta Regresiva de Validez del QR */}
+                <div className="space-y-2 bg-gray-800/80 p-3 rounded-xl border border-gray-700">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-300 font-medium">⏱️ El Código QR se actualizará en:</span>
+                    <span className={`font-bold font-mono text-sm px-2 py-0.5 rounded ${qrSecondsLeft <= 10 ? 'bg-red-950 text-red-400 border border-red-700 animate-pulse' : 'bg-amber-950 text-amber-300 border border-amber-800'}`}>
+                      {qrSecondsLeft}s
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-900 rounded-full h-2 overflow-hidden border border-gray-700">
+                    <div
+                      className={`h-2 transition-all duration-1000 ${qrSecondsLeft <= 10 ? 'bg-red-500' : 'bg-gradient-to-r from-amber-500 to-emerald-500'}`}
+                      style={{ width: `${(qrSecondsLeft / 60) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-amber-300 font-medium animate-pulse">
                   ⚡ Escanea la imagen superior con la cámara de WhatsApp de tu celular
                 </p>
               </div>
