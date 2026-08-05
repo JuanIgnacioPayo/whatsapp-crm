@@ -16,8 +16,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+import { initBaileysEngine } from './services/qr.service';
+
 // Socket.io initialization
 initSocketServer(server);
+
+// Baileys WhatsApp Engine initialization
+initBaileysEngine();
 
 // Routes
 app.use('/', routes);

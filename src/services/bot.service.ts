@@ -3,6 +3,21 @@ import { sendWhatsAppMessage } from './whatsapp.service';
 import { emitNewMessage, emitCustomerUpdate } from './socket.service';
 import { processWithLLM } from './llm.service';
 const prisma = new PrismaClient();
+let isGlobalBotEnabled = false;
+
+export function getGlobalBotStatus(): boolean {
+  return isGlobalBotEnabled;
+}
+
+export function setGlobalBotStatus(enabled?: boolean): boolean {
+  if (typeof enabled === 'boolean') {
+    isGlobalBotEnabled = enabled;
+  } else {
+    isGlobalBotEnabled = !isGlobalBotEnabled;
+  }
+  console.log(`🤖 Bot Global: ${isGlobalBotEnabled ? 'ENCENDIDO' : 'APAGADO'}`);
+  return isGlobalBotEnabled;
+}
 
 export async function handleIncomingMessage(phone: string, incomingText: string, name?: string) {
   // 1. Buscar o crear el cliente en la BD
@@ -16,7 +31,7 @@ export async function handleIncomingMessage(phone: string, incomingText: string,
       data: {
         phone,
         name: name || `Cliente ${phone.slice(-4)}`,
-        conversationState: 'BOT_ACTIVE',
+        conversationState: isGlobalBotEnabled ? 'BOT_ACTIVE' : 'PENDING',
         botStep: 'STEP_1_WELCOME'
       },
       include: { tags: { include: { tag: true } } }
@@ -37,15 +52,20 @@ export async function handleIncomingMessage(phone: string, incomingText: string,
   emitNewMessage(userMessage);
 
   // 3. Evaluar la Máquina de Estados del Bot
-  if (customer.conversationState === 'BOT_ACTIVE') {
+  if (isGlobalBotEnabled && customer.conversationState === 'BOT_ACTIVE') {
     await processBotStateMachine(customer, incomingText);
   } else {
-    // Si el bot ya se desconectó, solo actualizamos la última actividad para la cola del CRM
-    await prisma.customer.update({
+    // Si la conversación estaba archivada o el bot desactivado, pasar a PENDING/BOT_ACTIVE
+    const nextState = customer.conversationState === 'ARCHIVED'
+      ? (isGlobalBotEnabled ? 'BOT_ACTIVE' : 'PENDING')
+      : (customer.conversationState === 'BOT_ACTIVE' && !isGlobalBotEnabled ? 'PENDING' : customer.conversationState);
+
+    const updated = await prisma.customer.update({
       where: { id: customer.id },
-      data: { updatedAt: new Date() }
+      data: { updatedAt: new Date(), conversationState: nextState },
+      include: { tags: { include: { tag: true } }, assignedOperator: true }
     });
-    emitCustomerUpdate(customer);
+    emitCustomerUpdate(updated);
   }
 
   return { customer, userMessage };
@@ -126,4 +146,20 @@ async function processBotStateMachine(customer: any, text: string) {
     });
     emitNewMessage(botMsg);
   }
+}
+
+export async function toggleCustomerBotState(customerId: string) {
+  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+  if (!customer) throw new Error('Cliente no encontrado');
+
+  const newState = customer.conversationState === 'BOT_ACTIVE' ? 'PENDING' : 'BOT_ACTIVE';
+  
+  const updatedCustomer = await prisma.customer.update({
+    where: { id: customerId },
+    data: { conversationState: newState, botStep: 'STEP_1_WELCOME', updatedAt: new Date() },
+    include: { tags: { include: { tag: true } }, assignedOperator: true }
+  });
+
+  emitCustomerUpdate(updatedCustomer);
+  return updatedCustomer;
 }

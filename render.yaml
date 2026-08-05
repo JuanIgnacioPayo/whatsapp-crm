@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: whatsapp-crm
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        value: file:./dev.db
+      - key: META_VERIFY_TOKEN
+        value: crm_whatsapp_secret_token_123
+      - key: META_ACCESS_TOKEN
+        value: EAAOgfvZAsoF0BSKFgEbQ79HrtFonssZA13cW9Ew2ZCKrUfFkQuoPtPgoBSYiaNIdaumxqMPFsF5EbnCeZAl7C3EmNRX4KlvmJAZAQNZCrXijjX5noLTwlNz2YgwNIhYYUr9YC1gzbMNDHliMmW2pAPnycGdUQbBjPpItob9mckreUeSaUhi61I1pahue3USvRjpSJo6wtBKrSumPUZBTJ8tRU0UUjDgUOmj0Ttva3AwzPwxSOPIAWwIoHB6wBy1VUMP6vFJTPdrY3WlRciBlm7dp6ZCNB5oySeUZD
+      - key: META_PHONE_NUMBER_ID
+        value: "1237067292828450"
+      - key: META_PHONE_NUMBER
+        value: "+1 (555) 676-0814"

@@ -21,3 +21,4 @@ build/
 tunnel_url.txt
 cloudflare_url.txt
 scratch/
+baileys_auth_info/

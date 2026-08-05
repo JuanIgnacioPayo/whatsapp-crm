@@ -27,4 +27,14 @@ router.get('/api/products', getProducts);
 router.get('/api/metadata', getMetadata);
 router.post('/api/customers/:id/reset-bot', resetBotState);
 
+import {
+  getGlobalBotStatusHandler,
+  toggleGlobalBotHandler,
+  toggleCustomerBotHandler
+} from './controllers/crm.controller';
+
+router.get('/api/bot/global', getGlobalBotStatusHandler);
+router.post('/api/bot/global', toggleGlobalBotHandler);
+router.post('/api/customers/:id/toggle-bot', toggleCustomerBotHandler);
+
 export default router;

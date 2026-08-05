@@ -1,18 +1,19 @@
-import * as admin from 'firebase-admin';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 import path from 'path';
 
-let db: admin.firestore.Firestore | null = null;
+let db: Firestore | null = null;
 
 const serviceAccountPath = path.join(__dirname, '../../firebase-service-account.json');
 
 if (fs.existsSync(serviceAccountPath)) {
   try {
     const serviceAccount = require(serviceAccountPath);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+    initializeApp({
+      credential: cert(serviceAccount)
     });
-    db = admin.firestore();
+    db = getFirestore();
     console.log('✅ Firebase Admin SDK inicializado correctamente.');
   } catch (err) {
     console.error('❌ Error al inicializar Firebase Admin:', err);

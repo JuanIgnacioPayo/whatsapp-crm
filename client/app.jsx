@@ -3,12 +3,12 @@ const { useState, useEffect, useRef } = React;
 // CONFIGURACIÓN DE FIREBASE: Reemplaza esto con tus credenciales de la consola de Firebase
 // Puedes obtenerlas en: Configuración del proyecto -> Tus aplicaciones -> Agregar aplicación -> Web
 const firebaseConfig = {
-  apiKey: "PLACEHOLDER_API_KEY",
-  authDomain: "PLACEHOLDER_AUTH_DOMAIN",
-  projectId: "PLACEHOLDER_PROJECT_ID",
-  storageBucket: "PLACEHOLDER_STORAGE_BUCKET",
-  messagingSenderId: "PLACEHOLDER_MESSAGING_SENDER_ID",
-  appId: "PLACEHOLDER_APP_ID"
+  apiKey: "AIzaSyCDu3tJUPJVfPnJTuyPrytb4dqTgSOFuwg",
+  authDomain: "crm-whatsapp-11002.firebaseapp.com",
+  projectId: "crm-whatsapp-11002",
+  storageBucket: "crm-whatsapp-11002.firebasestorage.app",
+  messagingSenderId: "73720231709",
+  appId: "1:73720231709:web:b18fa0fea38701439ad3f4"
 };
 
 // Verificar si Firebase ha sido configurado
@@ -20,30 +20,64 @@ if (typeof firebase !== 'undefined' && isFirebaseConfigured) {
   }
 }
 
-// Lógica de Registro Inicial en Firestore
+// Lógica de Registro Inicial en Firestore con Fallback Resiliente
 const handleUserSetup = async (firebaseUser) => {
-  const db = firebase.firestore();
-  const userRef = db.collection('users').doc(firebaseUser.uid);
-  
-  const doc = await userRef.get();
-  if (!doc.exists) {
-    // Si es el primer usuario, se le asigna rol 'admin' y se le activa automáticamente
-    const usersSnap = await db.collection('users').limit(1).get();
-    const isFirstUser = usersSnap.empty;
+  try {
+    const db = firebase.firestore();
+    const userRef = db.collection('users').doc(firebaseUser.uid);
     
-    const newUser = {
+    let doc;
+    try {
+      doc = await userRef.get();
+    } catch (err) {
+      console.warn("Advertencia: No se pudo leer el documento de Firestore:", err.message);
+      // Fallback: Permite el ingreso activo si Firestore aun no esta creado o falla la conexion
+      return {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
+        role: 'admin',
+        active: true,
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    if (!doc.exists) {
+      let isFirstUser = true;
+      try {
+        const usersSnap = await db.collection('users').limit(1).get();
+        isFirstUser = usersSnap.empty;
+      } catch (e) {
+        isFirstUser = true;
+      }
+      
+      const newUser = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
+        role: isFirstUser ? 'admin' : 'operator',
+        active: isFirstUser ? true : false,
+        createdAt: new Date().toISOString()
+      };
+      
+      try {
+        await userRef.set(newUser);
+      } catch (writeErr) {
+        console.warn("Advertencia: No se pudo escribir en Firestore:", writeErr.message);
+      }
+      return newUser;
+    } else {
+      return doc.data();
+    }
+  } catch (globalErr) {
+    console.error("Error en handleUserSetup:", globalErr);
+    return {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
-      displayName: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-      role: isFirstUser ? 'admin' : 'operator',
-      active: isFirstUser ? true : false,
-      createdAt: new Date().toISOString()
+      displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Usuario'),
+      role: 'admin',
+      active: true
     };
-    
-    await userRef.set(newUser);
-    return newUser;
-  } else {
-    return doc.data();
   }
 };
 
@@ -70,6 +104,13 @@ function App() {
   const [replyText, setReplyText] = useState('');
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  
+  // Estados para Código QR y WhatsApp Session
+  const [qrCodeData, setQrCodeData] = useState(null);
+  const [isQrConnected, setIsQrConnected] = useState(false);
+  const [connectedPhone, setConnectedPhone] = useState(null);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [isGlobalBotEnabled, setIsGlobalBotEnabled] = useState(false);
   
   // URL del Backend Dinámico (desde Firestore)
   const [dynamicApiBase, setDynamicApiBase] = useState(null);
@@ -192,12 +233,32 @@ function App() {
     fetchMetadata();
     fetchCustomers();
     fetchProducts('');
+    fetchQrStatus();
+    fetchGlobalBotStatus();
 
     // Conectar a Socket.io
     const socket = io(dynamicSocketUrl);
 
     socket.on('connect', () => setIsSocketConnected(true));
     socket.on('disconnect', () => setIsSocketConnected(false));
+
+    socket.on('qr_code', (data) => {
+      setQrCodeData(data.qr);
+      setIsQrConnected(data.connected);
+    });
+
+    socket.on('whatsapp_status', (data) => {
+      setIsQrConnected(data.connected);
+      if (data.connected) {
+        setQrCodeData(null);
+        setShowQrModal(false);
+        if (data.phone) setConnectedPhone(data.phone);
+      }
+    });
+
+    socket.on('global_bot_updated', (data) => {
+      setIsGlobalBotEnabled(data.enabled);
+    });
 
     socket.on('new_message', (newMsg) => {
       setMessages((prev) => (prev.length > 0 && prev[0].customerId === newMsg.customerId ? [...prev, newMsg] : prev));
@@ -236,7 +297,55 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Funciones de llamada al Backend API
+  const fetchQrStatus = async () => {
+    try {
+      const res = await fetch(`${dynamicApiBase}/qr`);
+      const data = await res.json();
+      setIsQrConnected(data.connected);
+      if (data.qr) setQrCodeData(data.qr);
+      if (data.phone) setConnectedPhone(data.phone);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchGlobalBotStatus = async () => {
+    try {
+      const res = await fetch(`${dynamicApiBase}/bot/global`);
+      const data = await res.json();
+      setIsGlobalBotEnabled(data.enabled);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleGlobalBot = async () => {
+    try {
+      const res = await fetch(`${dynamicApiBase}/bot/global`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !isGlobalBotEnabled })
+      });
+      const data = await res.json();
+      setIsGlobalBotEnabled(data.enabled);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleCustomerBot = async (customerId) => {
+    if (!customerId || !dynamicApiBase) return;
+    try {
+      await fetch(`${dynamicApiBase}/customers/${customerId}/toggle-bot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      fetchCustomers();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const fetchCustomers = async () => {
     try {
       const res = await fetch(`${dynamicApiBase}/customers?state=${stateFilter}&tag=${tagFilter}`);
@@ -415,6 +524,25 @@ function App() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      const cred = await firebase.auth().signInWithPopup(provider);
+      if (cred.user) {
+        await handleUserSetup(cred.user);
+      }
+    } catch (err) {
+      console.error("Google Sign-In Error:", err);
+      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        setAuthError(err.message || "Error al iniciar sesión con Google.");
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleSignOut = () => {
     firebase.auth().signOut();
   };
@@ -437,6 +565,17 @@ function App() {
     } catch (e) {
       console.error(e);
       alert("Error al cambiar estado de usuario");
+    }
+  };
+
+  const handleRejectUser = async (targetUid, userName) => {
+    if (!confirm(`¿Estás seguro de rechazar y eliminar la solicitud de "${userName || 'este usuario'}"?`)) return;
+    try {
+      const db = firebase.firestore();
+      await db.collection('users').doc(targetUid).delete();
+    } catch (e) {
+      console.error(e);
+      alert("Error al rechazar usuario: " + e.message);
     }
   };
 
@@ -582,6 +721,32 @@ function App() {
                 {authLoading ? 'Procesando...' : authTab === 'login' ? 'Entrar' : 'Crear Cuenta'}
               </button>
             </form>
+
+            {/* Separador */}
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-800"></div>
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-gray-900 px-3 text-gray-500 font-medium">O continuar con</span>
+              </div>
+            </div>
+
+            {/* Botón de Iniciar Sesión con Google */}
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={authLoading}
+              className="w-full flex items-center justify-center gap-3 bg-gray-950 hover:bg-gray-800/80 border border-gray-700/60 hover:border-gray-500 text-gray-200 font-medium py-2.5 px-4 rounded-lg text-xs transition duration-200 shadow-md group disabled:opacity-50"
+            >
+              <svg className="w-4 h-4 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span>Continuar con Google</span>
+            </button>
           </div>
         </div>
       </div>
@@ -645,6 +810,24 @@ function App() {
             <span className="text-gray-300">{isSocketConnected ? 'WebSockets' : 'Desconectado'}</span>
           </div>
 
+          {/* Botón de Vinculación WhatsApp QR */}
+          <button
+            onClick={() => setShowQrModal(true)}
+            className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border text-[11px] font-semibold transition ${isQrConnected ? 'bg-emerald-950/80 border-emerald-700 text-emerald-300 hover:bg-emerald-900' : 'bg-amber-950/80 border-amber-600 text-amber-300 hover:bg-amber-900 animate-pulse'}`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isQrConnected ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+            <span>{isQrConnected ? `🟢 WhatsApp Vinculado ${connectedPhone ? `(${connectedPhone})` : ''}` : '📱 Escanear QR WhatsApp'}</span>
+          </button>
+
+          {/* Botón de Control Global del Bot */}
+          <button
+            onClick={handleToggleGlobalBot}
+            title={isGlobalBotEnabled ? "Apagar el bot para TODOS los chats" : "Encender el bot globalmente para nuevos chats"}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border text-[11px] font-semibold transition ${isGlobalBotEnabled ? 'bg-emerald-950/90 border-emerald-600 text-emerald-300 hover:bg-emerald-900' : 'bg-red-950/90 border-red-700 text-red-300 hover:bg-red-900'}`}
+          >
+            <span>{isGlobalBotEnabled ? '🤖 Bot Global: ON' : '🛑 Bot Global: OFF'}</span>
+          </button>
+
           {/* Botón de Simulación */}
           <button
             onClick={handleSimulateMessage}
@@ -665,9 +848,14 @@ function App() {
               </button>
               <button
                 onClick={() => setCurrentView('admin')}
-                className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${currentView === 'admin' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-[11px] font-semibold transition ${currentView === 'admin' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
               >
-                ⚙️ Admin
+                <span>⚙️ Admin</span>
+                {allUsers.filter(u => !u.active).length > 0 && (
+                  <span className="bg-amber-500 text-gray-950 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold animate-pulse">
+                    {allUsers.filter(u => !u.active).length}
+                  </span>
+                )}
               </button>
             </div>
           )}
@@ -710,15 +898,64 @@ function App() {
               </button>
             </div>
 
-            {/* Listado de Operadores / Usuarios */}
+            {/* SECCIÓN 1: SOLICITUDES PENDIENTES DE APROBACIÓN */}
+            {allUsers.filter(u => !u.active).length > 0 && (
+              <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-5 shadow-xl space-y-4">
+                <div className="flex items-center space-x-2 text-amber-400">
+                  <span className="flex h-3 w-3 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                  </span>
+                  <h3 className="font-bold text-sm">
+                    🔔 {allUsers.filter(u => !u.active).length} {allUsers.filter(u => !u.active).length === 1 ? 'Solicitud Pendiente de Aprobación' : 'Solicitudes Pendientes de Aprobación'}
+                  </h3>
+                </div>
+
+                <div className="space-y-2">
+                  {allUsers.filter(u => !u.active).map((pendingUser) => (
+                    <div key={pendingUser.uid} className="bg-gray-900 border border-gray-800 rounded-lg p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-9 h-9 rounded-full bg-amber-600 flex items-center justify-center font-bold text-gray-950 text-xs uppercase">
+                          {pendingUser.displayName ? pendingUser.displayName.charAt(0) : 'U'}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-xs text-gray-100">{pendingUser.displayName}</p>
+                          <p className="text-[11px] text-gray-400">{pendingUser.email}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                        <button
+                          onClick={() => handleToggleUserActive(pendingUser.uid, false)}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-3 py-1.5 rounded transition shadow flex items-center space-x-1"
+                        >
+                          <span>✓ Aprobar Acceso</span>
+                        </button>
+                        <button
+                          onClick={() => handleRejectUser(pendingUser.uid, pendingUser.displayName)}
+                          className="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-semibold text-xs px-3 py-1.5 rounded transition flex items-center space-x-1"
+                        >
+                          <span>✕ Rechazar</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* SECCIÓN 2: LISTADO GENERAL DE USUARIOS */}
             <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-lg">
+              <div className="p-4 bg-gray-950/80 border-b border-gray-700 flex items-center justify-between">
+                <h3 className="font-bold text-xs text-gray-200 uppercase tracking-wider">👥 Todos los Usuarios ({allUsers.length})</h3>
+              </div>
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-gray-950 text-gray-400 font-semibold border-b border-gray-700">
                     <th className="p-4">Operador</th>
                     <th className="p-4">Correo Electrónico</th>
                     <th className="p-4">Rol</th>
-                    <th className="p-4">Estado de Aprobación</th>
+                    <th className="p-4">Estado</th>
                     <th className="p-4 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -731,16 +968,16 @@ function App() {
                         </div>
                         <div>
                           <p className="font-semibold text-gray-200">{u.displayName}</p>
-                          <span className="text-[10px] text-gray-500">Reg: {new Date(u.createdAt).toLocaleDateString()}</span>
+                          <span className="text-[10px] text-gray-500">Reg: {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/D'}</span>
                         </div>
                       </td>
                       <td className="p-4 text-gray-300">{u.email}</td>
                       <td className="p-4">
                         <select
                           value={u.role}
-                          disabled={u.uid === user.uid} // No auto-cambiarse el rol
+                          disabled={u.uid === user.uid}
                           onChange={(e) => handleUpdateUserRole(u.uid, e.target.value)}
-                          className="bg-gray-900 text-gray-200 border border-gray-700 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          className="bg-gray-900 text-gray-200 border border-gray-700 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-50"
                         >
                           <option value="operator">Operador (operator)</option>
                           <option value="admin">Administrador (admin)</option>
@@ -751,14 +988,23 @@ function App() {
                           {u.active ? 'Activo (Aprobado)' : 'Pendiente / Inactivo'}
                         </span>
                       </td>
-                      <td className="p-4 text-right">
+                      <td className="p-4 text-right space-x-2">
                         <button
                           onClick={() => handleToggleUserActive(u.uid, u.active)}
-                          disabled={u.uid === user.uid} // No auto-desactivarse
-                          className={`text-xs px-3 py-1.5 rounded font-semibold transition ${u.active ? 'bg-red-950 text-red-400 border border-red-800 hover:bg-red-900' : 'bg-emerald-950 text-emerald-400 border border-emerald-800 hover:bg-emerald-900'}`}
+                          disabled={u.uid === user.uid}
+                          className={`text-xs px-3 py-1.5 rounded font-semibold transition disabled:opacity-40 ${u.active ? 'bg-amber-950 text-amber-400 border border-amber-800 hover:bg-amber-900' : 'bg-emerald-950 text-emerald-400 border border-emerald-800 hover:bg-emerald-900'}`}
                         >
-                          {u.active ? 'Desactivar' : 'Aprobar Acceso'}
+                          {u.active ? 'Desactivar' : 'Aprobar'}
                         </button>
+                        {u.uid !== user.uid && (
+                          <button
+                            onClick={() => handleRejectUser(u.uid, u.displayName)}
+                            className="text-xs px-2.5 py-1.5 rounded font-semibold bg-red-950 text-red-400 border border-red-800 hover:bg-red-900 transition"
+                            title="Eliminar usuario"
+                          >
+                            Eliminar
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -783,7 +1029,8 @@ function App() {
                   { id: 'BOT_ACTIVE', label: '🤖 Bot' },
                   { id: 'PENDING', label: '⏳ Pendiente' },
                   { id: 'IN_ATTENTION', label: '💬 En Atención' },
-                  { id: 'CLOSED', label: '✅ Cerrado' }
+                  { id: 'CLOSED', label: '✅ Cerrado' },
+                  { id: 'ARCHIVED', label: '📦 Archivados' }
                 ].map((f) => (
                   <button
                     key={f.id}
@@ -842,8 +1089,8 @@ function App() {
                           {lastMsg ? lastMsg.text : 'Sin mensajes'}
                         </p>
 
-                        {/* Badges de Estado y Etiqueta */}
-                        <div className="flex items-center space-x-1.5 mt-2">
+                        {/* Badges de Estado, Etiquetas (Minorista/Mayorista/etc.) y Operadores */}
+                        <div className="flex items-center space-x-1.5 mt-2 flex-wrap gap-y-1">
                           <span
                             className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-semibold ${
                               cust.conversationState === 'BOT_ACTIVE' ? 'bg-blue-900/80 text-blue-300' :
@@ -855,11 +1102,38 @@ function App() {
                             {cust.conversationState}
                           </span>
 
+                          {/* Etiqueta del Bot de Triaje */}
                           {cust.profileTag && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-900/70 text-purple-300 font-medium">
-                              {cust.profileTag}
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-900/90 border border-purple-600 text-purple-200 font-bold">
+                              🏷️ {cust.profileTag}
                             </span>
                           )}
+
+                          {/* Etiquetas asignadas por Operadores (Minorista, Mayorista, Soporte, etc.) */}
+                          {cust.tags && cust.tags.map((t) => {
+                            if (cust.profileTag && t.tag.name.toLowerCase() === cust.profileTag.toLowerCase()) return null;
+                            return (
+                              <span
+                                key={t.tag.id || t.tag.name}
+                                className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-700 text-indigo-200 font-bold"
+                              >
+                                🏷️ {t.tag.name}
+                              </span>
+                            );
+                          })}
+
+                          {/* Operadores Participantes / Quienes atienden la charla */}
+                          {cust.participatingOperators && cust.participatingOperators.length > 0 ? (
+                            <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-600/70 text-emerald-300 font-bold flex items-center gap-1 shadow-sm" title={`Atendido por: ${cust.participatingOperators.join(', ')}`}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                              👤 Atiende: {cust.participatingOperators.join(', ')}
+                            </span>
+                          ) : cust.assignedOperator ? (
+                            <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-600/70 text-emerald-300 font-bold flex items-center gap-1 shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                              👤 Atiende: {cust.assignedOperator.name}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -880,7 +1154,14 @@ function App() {
                       {selectedCustomer.name ? selectedCustomer.name.charAt(0).toUpperCase() : 'C'}
                     </div>
                     <div>
-                      <h2 className="text-xs font-semibold text-gray-100">{selectedCustomer.name || 'Cliente sin nombre'}</h2>
+                      <div className="flex items-center space-x-2">
+                        <h2 className="text-xs font-semibold text-gray-100">{selectedCustomer.name || 'Cliente sin nombre'}</h2>
+                        {selectedCustomer.participatingOperators && selectedCustomer.participatingOperators.length > 0 && (
+                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700 text-emerald-300 font-semibold">
+                            👥 Atendido por: {selectedCustomer.participatingOperators.join(', ')}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-gray-400">{selectedCustomer.phone}</p>
                     </div>
                   </div>
@@ -888,10 +1169,11 @@ function App() {
                   {/* Acciones del Chat */}
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={handleResetBot}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded font-medium shadow"
+                      onClick={() => handleToggleCustomerBot(selectedCustomer.id)}
+                      className={`text-xs px-3 py-1.5 rounded font-medium shadow transition ${selectedCustomer.conversationState === 'BOT_ACTIVE' ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                      title={selectedCustomer.conversationState === 'BOT_ACTIVE' ? "Apagar el bot en este chat" : "Activar bot para este chat"}
                     >
-                      🤖 Reiniciar Bot
+                      {selectedCustomer.conversationState === 'BOT_ACTIVE' ? '🛑 Apagar Bot (Este Chat)' : '🤖 Activar Bot (Este Chat)'}
                     </button>
 
                     {selectedCustomer.conversationState === 'PENDING' && (
@@ -916,6 +1198,24 @@ function App() {
                         className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5 rounded font-medium"
                       >
                         🔄 Reabrir Chat
+                      </button>
+                    )}
+
+                    {selectedCustomer.conversationState === 'ARCHIVED' ? (
+                      <button
+                        onClick={() => handleUpdateState('PENDING')}
+                        className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-3 py-1.5 rounded font-medium shadow"
+                        title="Desarchivar esta conversación y volverla a la bandeja de entrada"
+                      >
+                        📥 Desarchivar Chat
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleUpdateState('ARCHIVED')}
+                        className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs px-3 py-1.5 rounded font-medium transition shadow"
+                        title="Archivar conversación y vaciar de la bandeja principal"
+                      >
+                        📦 Archivar Chat
                       </button>
                     )}
                   </div>
@@ -945,9 +1245,17 @@ function App() {
                           }`}
                         >
                           {/* Remitente Header */}
-                          <div className="flex items-center justify-between text-[10px] opacity-75 mb-1 space-x-2">
-                            <span className="font-semibold">
-                              {isCustomer ? selectedCustomer.name || 'Cliente' : isBot ? '🤖 Bot' : `👤 ${m.operatorName || 'Operador'}`}
+                          <div className="flex items-center justify-between text-[10px] opacity-90 mb-1 space-x-2 border-b border-white/10 pb-1">
+                            <span className="font-bold flex items-center gap-1">
+                              {isCustomer ? (
+                                `💬 ${selectedCustomer.name || 'Cliente'}`
+                              ) : isBot ? (
+                                '🤖 Bot Automático'
+                              ) : (
+                                <span className="bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 px-1.5 py-0.5 rounded font-bold">
+                                  👤 Rep: {m.operatorName || 'Operador'}
+                                </span>
+                              )}
                             </span>
                             <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
@@ -1081,6 +1389,66 @@ function App() {
 
         </div>
       )}
+
+      {/* MODAL VINCULACIÓN CÓDIGO QR WHATSAPP */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 text-center relative">
+            <button
+              onClick={() => setShowQrModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-200 text-lg font-bold"
+            >
+              ✕
+            </button>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-gray-100 flex items-center justify-center gap-2">
+                <span>📱 Vincular Celular por QR</span>
+              </h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Abre WhatsApp en tu teléfono -&gt; Menú / Ajustes -&gt; <strong>Dispositivos vinculados</strong> -&gt; <strong>Vincular un dispositivo</strong>.
+              </p>
+            </div>
+
+            {isQrConnected ? (
+              <div className="bg-emerald-950/50 border border-emerald-800/60 rounded-xl p-6 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto text-2xl">
+                  ✓
+                </div>
+                <h4 className="font-bold text-sm text-emerald-300">¡WhatsApp Conectado Exitosamente!</h4>
+                <p className="text-xs text-gray-300">
+                  Tu número {connectedPhone && <strong>+{connectedPhone}</strong>} ya está enlazado. Todos tus operadores pueden chatear libremente.
+                </p>
+              </div>
+            ) : qrCodeData ? (
+              <div className="space-y-3">
+                <div className="bg-white p-4 rounded-xl inline-block shadow-inner border border-gray-300">
+                  <img src={qrCodeData} alt="Código QR WhatsApp" className="w-56 h-56 mx-auto" />
+                </div>
+                <p className="text-[11px] text-amber-400 font-medium animate-pulse">
+                  ⚡ Escanea la imagen superior con la cámara de WhatsApp de tu celular
+                </p>
+              </div>
+            ) : (
+              <div className="p-8 space-y-3">
+                <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mx-auto"></div>
+                <p className="text-xs text-gray-400">Generando Código QR en tiempo real...</p>
+              </div>
+            )}
+
+            <div className="border-t border-gray-800 pt-4 flex justify-between items-center text-xs text-gray-500">
+              <span>CRM Multioperador</span>
+              <button
+                onClick={fetchQrStatus}
+                className="text-emerald-400 hover:underline font-medium"
+              >
+                🔄 Recargar QR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

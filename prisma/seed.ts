@@ -45,57 +45,8 @@ async function main() {
     });
   }
 
-  // 3. Catálogo de productos / Lista de Precios inicial
-  const productsData = [
-    {
-      code: 'PROD-001',
-      name: 'Notebook Pro 15"',
-      category: 'Computación',
-      description: 'Procesador i7, 16GB RAM, SSD 512GB',
-      price: 899.99,
-      stock: 25
-    },
-    {
-      code: 'PROD-002',
-      name: 'Smartphone X12 128GB',
-      category: 'Celulares',
-      description: 'Pantalla OLED 6.5", Cámara 50MP',
-      price: 499.50,
-      stock: 40
-    },
-    {
-      code: 'PROD-003',
-      name: 'Teclado Mecánico RGB',
-      category: 'Accesorios',
-      description: 'Switches Red, Conexión USB-C / Bluetooth',
-      price: 65.00,
-      stock: 100
-    },
-    {
-      code: 'PROD-004',
-      name: 'Monitor 4K 27" IPS',
-      category: 'Monitores',
-      description: 'Respuesta 1ms, HDR400, 144Hz',
-      price: 320.00,
-      stock: 15
-    },
-    {
-      code: 'PROD-005',
-      name: 'Auriculares Noise Cancelling',
-      category: 'Audio',
-      description: 'Cancelación activa de ruido, 30h de batería',
-      price: 110.00,
-      stock: 60
-    }
-  ];
-
-  for (const p of productsData) {
-    await prisma.product.upsert({
-      where: { code: p.code },
-      update: {},
-      create: p
-    });
-  }
+  // 3. Catálogo de productos (Vacío para producción)
+  const productsData: any[] = [];
 
   console.log('✅ Base de datos sembrada con éxito.');
 }

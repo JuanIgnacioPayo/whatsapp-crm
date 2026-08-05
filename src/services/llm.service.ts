@@ -32,6 +32,12 @@ Tu trabajo es actuar como recepcionista:
 5. UNA VEZ que tengas claro el perfil del cliente (Mayorista/Minorista/Soporte) Y el motivo de su consulta, DEBES usar la herramienta 'transfer_to_agent' para derivarlo. No intentes resolver el problema tú mismo si no es tu rol, solo deriva al equipo correcto.`;
 
 export async function processWithLLM(history: any[], incomingText: string) {
+  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.trim() === '') {
+    return {
+      type: 'TEXT',
+      text: '🤖 ¡Hola! Gracias por comunicarte con nuestro servicio de atención. En un momento un asesor humano de nuestro equipo tomará tu consulta. ¡Muchas gracias por tu paciencia!'
+    };
+  }
   // Formatear el historial para el modelo
   // history debe contener { senderType, text } ordenado cronológicamente
   const contents = history.map(msg => ({

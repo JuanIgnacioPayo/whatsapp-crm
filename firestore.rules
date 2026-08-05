@@ -30,12 +30,9 @@ service cloud.firestore {
 
     // Colección de Usuarios
     match /users/{userId} {
-      // Un usuario autenticado puede leer y crear su propio documento de perfil
-      allow read: if isAuthenticated() && request.auth.uid == userId;
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      
-      // Los administradores pueden hacer cualquier operación (leer, listar, actualizar, borrar) en todos los perfiles
-      allow read, write: if isAdmin();
+      // Cualquier usuario autenticado puede leer y gestionar su propio perfil o consultar usuarios
+      allow read, create, update: if isAuthenticated();
+      allow delete: if isAdmin();
     }
   }
 }

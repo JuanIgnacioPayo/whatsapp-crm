@@ -11,8 +11,16 @@ export async function getCustomers(req: Request, res: Response) {
     const { state, tag } = req.query;
 
     const whereClause: any = {};
-    if (state && typeof state === 'string' && state !== 'ALL') {
-      whereClause.conversationState = state;
+    if (state && typeof state === 'string') {
+      if (state === 'ARCHIVED') {
+        whereClause.conversationState = 'ARCHIVED';
+      } else if (state !== 'ALL') {
+        whereClause.conversationState = state;
+      } else {
+        whereClause.conversationState = { not: 'ARCHIVED' };
+      }
+    } else {
+      whereClause.conversationState = { not: 'ARCHIVED' };
     }
 
     if (tag && typeof tag === 'string' && tag !== 'ALL') {
@@ -36,7 +44,28 @@ export async function getCustomers(req: Request, res: Response) {
       orderBy: { updatedAt: 'desc' }
     });
 
-    return res.json(customers);
+    const enrichedCustomers = await Promise.all(
+      customers.map(async (cust) => {
+        const operatorMsgs = await prisma.message.findMany({
+          where: {
+            customerId: cust.id,
+            senderType: 'OPERATOR',
+            operatorName: { not: null }
+          },
+          select: { operatorName: true },
+          distinct: ['operatorName']
+        });
+        const participatingOperators = operatorMsgs
+          .map(m => m.operatorName)
+          .filter((name): name is string => Boolean(name));
+        return {
+          ...cust,
+          participatingOperators
+        };
+      })
+    );
+
+    return res.json(enrichedCustomers);
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -97,10 +126,22 @@ export async function sendOperatorMessage(req: Request, res: Response) {
     });
 
     // Emitir eventos WebSockets
-    emitOperatorResponse({ customerId: customer.id, message });
-    emitCustomerUpdate(updatedCustomer);
+    const operatorMsgs = await prisma.message.findMany({
+      where: { customerId: customer.id, senderType: 'OPERATOR', operatorName: { not: null } },
+      select: { operatorName: true },
+      distinct: ['operatorName']
+    });
+    const participatingOperators = operatorMsgs.map(m => m.operatorName).filter((n): n is string => Boolean(n));
 
-    return res.json({ message, customer: updatedCustomer });
+    const enrichedCustomer = {
+      ...updatedCustomer,
+      participatingOperators
+    };
+
+    emitOperatorResponse({ customerId: customer.id, message });
+    emitCustomerUpdate(enrichedCustomer);
+
+    return res.json({ message, customer: enrichedCustomer });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -227,6 +268,34 @@ export async function resetBotState(req: Request, res: Response) {
     });
 
     emitCustomerUpdate(updatedCustomer);
+    return res.json(updatedCustomer);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+// 9. Control del Bot Global y por Chat Particular
+import { getGlobalBotStatus, setGlobalBotStatus, toggleCustomerBotState } from '../services/bot.service';
+import { getIO } from '../services/socket.service';
+
+export async function getGlobalBotStatusHandler(req: Request, res: Response) {
+  return res.json({ enabled: getGlobalBotStatus() });
+}
+
+export async function toggleGlobalBotHandler(req: Request, res: Response) {
+  const { enabled } = req.body;
+  const newStatus = setGlobalBotStatus(enabled);
+  try {
+    const io = getIO();
+    io.emit('global_bot_updated', { enabled: newStatus });
+  } catch (e) {}
+  return res.json({ enabled: newStatus });
+}
+
+export async function toggleCustomerBotHandler(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const updatedCustomer = await toggleCustomerBotState(id);
     return res.json(updatedCustomer);
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
