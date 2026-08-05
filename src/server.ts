@@ -8,6 +8,14 @@ import { initSocketServer } from './services/socket.service';
 
 dotenv.config();
 
+import { execSync } from 'child_process';
+try {
+  console.log('🔄 Verificando y sincronizando esquema de base de datos Prisma...');
+  execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
+} catch (e) {
+  console.error('Error al sincronizar esquema Prisma:', e);
+}
+
 const app = express();
 const server = http.createServer(app);
 

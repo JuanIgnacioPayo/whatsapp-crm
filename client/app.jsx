@@ -242,7 +242,7 @@ function App() {
     fetchGlobalBotStatus();
 
     // Conectar a Socket.io
-    const socket = io(dynamicSocketUrl);
+    const socket = io(dynamicSocketUrl, { transports: ['polling', 'websocket'] });
 
     socket.on('connect', () => setIsSocketConnected(true));
     socket.on('disconnect', () => setIsSocketConnected(false));
@@ -355,12 +355,17 @@ function App() {
     try {
       const res = await fetch(`${dynamicApiBase}/customers?state=${stateFilter}&tag=${tagFilter}`);
       const data = await res.json();
-      setCustomers(data);
-      if (data.length > 0 && !selectedCustomerId) {
-        setSelectedCustomerId(data[0].id);
+      if (Array.isArray(data)) {
+        setCustomers(data);
+        if (data.length > 0 && !selectedCustomerId) {
+          setSelectedCustomerId(data[0].id);
+        }
+      } else {
+        setCustomers([]);
       }
     } catch (e) {
       console.error(e);
+      setCustomers([]);
     }
   };
 
@@ -368,9 +373,10 @@ function App() {
     try {
       const res = await fetch(`${dynamicApiBase}/customers/${customerId}/messages`);
       const data = await res.json();
-      setMessages(data);
+      setMessages(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
+      setMessages([]);
     }
   };
 
@@ -378,9 +384,10 @@ function App() {
     try {
       const res = await fetch(`${dynamicApiBase}/products?search=${encodeURIComponent(query)}`);
       const data = await res.json();
-      setProducts(data);
+      setProducts(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
+      setProducts([]);
     }
   };
 
@@ -388,7 +395,9 @@ function App() {
     try {
       const res = await fetch(`${dynamicApiBase}/metadata`);
       const data = await res.json();
-      setMetadata(data);
+      if (data && typeof data === 'object' && !data.error) {
+        setMetadata(data);
+      }
     } catch (e) {
       console.error(e);
     }
