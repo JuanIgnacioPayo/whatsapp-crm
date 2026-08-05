@@ -32,6 +32,11 @@ import {
   toggleGlobalBotHandler,
   toggleCustomerBotHandler
 } from './controllers/crm.controller';
+import { getWhatsAppStatus } from './services/qr.service';
+
+router.get('/api/qr', (req, res) => {
+  res.json(getWhatsAppStatus());
+});
 
 router.get('/api/bot/global', getGlobalBotStatusHandler);
 router.post('/api/bot/global', toggleGlobalBotHandler);
