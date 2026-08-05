@@ -11,6 +11,14 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const routes_1 = __importDefault(require("./routes"));
 const socket_service_1 = require("./services/socket.service");
 dotenv_1.default.config();
+const child_process_1 = require("child_process");
+try {
+    console.log('🔄 Verificando y sincronizando esquema de base de datos Prisma...');
+    (0, child_process_1.execSync)('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
+}
+catch (e) {
+    console.error('Error al sincronizar esquema Prisma:', e);
+}
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
 // Middlewares

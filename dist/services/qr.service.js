@@ -122,6 +122,62 @@ async function initBaileysEngine() {
                 }
             }
         });
+        // Escuchar la sincronización inicial del historial reciente de WhatsApp Web
+        sock.ev.on('messaging-history.set', async ({ chats, messages }) => {
+            console.log(`📚 [BAILEYS QR] Sincronizando historial reciente: ${chats?.length || 0} chats, ${messages?.length || 0} mensajes...`);
+            if (!messages || messages.length === 0)
+                return;
+            for (const msg of messages) {
+                try {
+                    const fromJid = msg.key.remoteJid;
+                    if (!fromJid || fromJid.endsWith('@g.us') || fromJid === 'status@broadcast')
+                        continue;
+                    const fromPhone = fromJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                    const isFromMe = msg.key.fromMe;
+                    const profileName = msg.pushName || undefined;
+                    let text = '';
+                    if (msg.message?.conversation) {
+                        text = msg.message.conversation;
+                    }
+                    else if (msg.message?.extendedTextMessage?.text) {
+                        text = msg.message.extendedTextMessage.text;
+                    }
+                    else if (msg.message?.imageMessage?.caption) {
+                        text = msg.message.imageMessage.caption || '📷 Imagen recibida';
+                    }
+                    else {
+                        continue;
+                    }
+                    const prisma = new (require('@prisma/client').PrismaClient)();
+                    let customer = await prisma.customer.findUnique({ where: { phone: fromPhone } });
+                    if (!customer) {
+                        customer = await prisma.customer.create({
+                            data: {
+                                phone: fromPhone,
+                                name: profileName || `Cliente ${fromPhone.slice(-4)}`,
+                                conversationState: 'PENDING'
+                            }
+                        });
+                    }
+                    const msgDate = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000) : new Date();
+                    await prisma.message.create({
+                        data: {
+                            customerId: customer.id,
+                            senderType: isFromMe ? 'OPERATOR' : 'CUSTOMER',
+                            operatorName: isFromMe ? 'WhatsApp Celular' : undefined,
+                            text,
+                            createdAt: msgDate,
+                            status: 'READ'
+                        }
+                    }).catch(() => { });
+                    await prisma.$disconnect();
+                }
+                catch (e) {
+                    // Ignorar errores individuales en el bucle de sincronización
+                }
+            }
+            console.log(`✅ Sincronización del historial reciente completada.`);
+        });
         sock.ev.on('messages.upsert', async (m) => {
             if (m.type !== 'notify')
                 return;

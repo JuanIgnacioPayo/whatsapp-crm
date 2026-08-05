@@ -112,6 +112,12 @@ function App() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [isGlobalBotEnabled, setIsGlobalBotEnabled] = useState(false);
   
+  // Estados de Notificaciones Auditivas
+  const [isSoundEnabled, setIsSoundEnabled] = useState(() => localStorage.getItem('crm_sound_enabled') !== 'false');
+  const [soundVolume, setSoundVolume] = useState(() => Number(localStorage.getItem('crm_sound_volume')) || 80);
+  const [soundType, setSoundType] = useState(() => localStorage.getItem('crm_sound_type') || 'chime');
+  const [showSoundModal, setShowSoundModal] = useState(false);
+  
   // URL del Backend Dinámico (desde Firestore)
   const [dynamicApiBase, setDynamicApiBase] = useState(null);
   const [dynamicSocketUrl, setDynamicSocketUrl] = useState(null);
@@ -231,6 +237,56 @@ function App() {
     return () => unsubscribe();
   }, [userProfile]);
 
+  // Web Audio API Synthesizer (Notificaciones Sonoras de alta fidelidad)
+  const playNotificationSound = (type = soundType, volLevel = soundVolume) => {
+    try {
+      if (volLevel <= 0) return;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const gainNode = ctx.createGain();
+      const vol = (volLevel / 100) * 0.4;
+      gainNode.gain.setValueAtTime(vol, ctx.currentTime);
+      gainNode.connect(ctx.destination);
+
+      if (type === 'chime') {
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        osc1.type = 'sine';
+        osc2.type = 'sine';
+        osc1.frequency.setValueAtTime(880, ctx.currentTime);
+        osc2.frequency.setValueAtTime(1320, ctx.currentTime + 0.1);
+        osc1.connect(gainNode);
+        osc2.connect(gainNode);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.3);
+        osc2.start(ctx.currentTime + 0.1);
+        osc2.stop(ctx.currentTime + 0.6);
+      } else if (type === 'bell') {
+        const osc = ctx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1046.5, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(523.25, ctx.currentTime + 0.4);
+        osc.connect(gainNode);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.5);
+      } else if (type === 'pop') {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.08);
+        osc.connect(gainNode);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.12);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // 4. Efecto: Inicializar WebSockets y cargar datos del CRM cuando se define la URL base
   useEffect(() => {
     if (!dynamicApiBase) return;
@@ -266,6 +322,9 @@ function App() {
     });
 
     socket.on('new_message', (newMsg) => {
+      if (newMsg.senderType === 'CUSTOMER' && isSoundEnabled) {
+        playNotificationSound(soundType, soundVolume);
+      }
       setMessages((prev) => (prev.length > 0 && prev[0].customerId === newMsg.customerId ? [...prev, newMsg] : prev));
       fetchCustomers();
     });
@@ -840,6 +899,15 @@ function App() {
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border text-[11px] font-semibold transition ${isGlobalBotEnabled ? 'bg-emerald-950/90 border-emerald-600 text-emerald-300 hover:bg-emerald-900' : 'bg-red-950/90 border-red-700 text-red-300 hover:bg-red-900'}`}
           >
             <span>{isGlobalBotEnabled ? '🤖 Bot Global: ON' : '🛑 Bot Global: OFF'}</span>
+          </button>
+
+          {/* Botón Configuración de Notificaciones */}
+          <button
+            onClick={() => setShowSoundModal(true)}
+            title="Configurar sonidos y volumen de notificaciones"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-gray-700 bg-gray-900 hover:bg-gray-800 text-gray-300 text-[11px] font-semibold transition"
+          >
+            <span>{isSoundEnabled ? `🔔 Sonido (${soundVolume}%)` : '🔕 Silenciado'}</span>
           </button>
 
           {/* Botón de Simulación */}
@@ -1457,6 +1525,95 @@ function App() {
                 className="text-emerald-400 hover:underline font-medium"
               >
                 🔄 Recargar QR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIGURACIÓN NOTIFICACIONES DE SONIDO */}
+      {showSoundModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 text-left relative">
+            <button
+              onClick={() => setShowSoundModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-200 text-lg font-bold"
+            >
+              ✕
+            </button>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-gray-100 flex items-center gap-2">
+                <span>🔔 Notificaciones de Sonido</span>
+              </h3>
+              <p className="text-xs text-gray-400">
+                Ajusta las alertas sonoras al recibir nuevos mensajes de clientes.
+              </p>
+            </div>
+
+            <div className="space-y-4 pt-2">
+              {/* Interruptor Encendido/Apagado */}
+              <div className="flex items-center justify-between bg-gray-800/60 p-3 rounded-xl border border-gray-700">
+                <div>
+                  <span className="text-xs font-semibold text-gray-200">Alertas de Sonido</span>
+                  <p className="text-[10px] text-gray-400">Reproducir tono cuando entra un chat</p>
+                </div>
+                <button
+                  onClick={() => {
+                    const next = !isSoundEnabled;
+                    setIsSoundEnabled(next);
+                    localStorage.setItem('crm_sound_enabled', String(next));
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition ${isSoundEnabled ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                >
+                  {isSoundEnabled ? 'ACTIVADO' : 'APAGADO'}
+                </button>
+              </div>
+
+              {/* Slider de Volumen */}
+              <div className="space-y-1.5 bg-gray-800/60 p-3 rounded-xl border border-gray-700">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-gray-200">Volumen</span>
+                  <span className="text-emerald-400 font-bold">{soundVolume}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={soundVolume}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setSoundVolume(val);
+                    localStorage.setItem('crm_sound_volume', String(val));
+                  }}
+                  className="w-full accent-emerald-500 cursor-pointer"
+                />
+              </div>
+
+              {/* Selector de Tono */}
+              <div className="space-y-1.5 bg-gray-800/60 p-3 rounded-xl border border-gray-700">
+                <span className="text-xs font-semibold text-gray-200">Tono de Notificación</span>
+                <select
+                  value={soundType}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    setSoundType(t);
+                    localStorage.setItem('crm_sound_type', t);
+                  }}
+                  className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="chime">🎵 Chime Suave (Recomendado)</option>
+                  <option value="bell">🔔 Campana Cristal</option>
+                  <option value="pop">💥 Pop Digital</option>
+                </select>
+              </div>
+
+              {/* Probar Sonido */}
+              <button
+                onClick={() => playNotificationSound(soundType, soundVolume)}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2.5 rounded-xl transition shadow flex items-center justify-center space-x-2"
+              >
+                <span>🔊 Probar Sonido Actual</span>
               </button>
             </div>
           </div>

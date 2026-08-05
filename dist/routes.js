@@ -17,6 +17,10 @@ router.get('/api/products', crm_controller_1.getProducts);
 router.get('/api/metadata', crm_controller_1.getMetadata);
 router.post('/api/customers/:id/reset-bot', crm_controller_1.resetBotState);
 const crm_controller_2 = require("./controllers/crm.controller");
+const qr_service_1 = require("./services/qr.service");
+router.get('/api/qr', (req, res) => {
+    res.json((0, qr_service_1.getWhatsAppStatus)());
+});
 router.get('/api/bot/global', crm_controller_2.getGlobalBotStatusHandler);
 router.post('/api/bot/global', crm_controller_2.toggleGlobalBotHandler);
 router.post('/api/customers/:id/toggle-bot', crm_controller_2.toggleCustomerBotHandler);
