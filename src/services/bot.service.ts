@@ -5,6 +5,9 @@ import { processWithLLM } from './llm.service';
 const prisma = new PrismaClient();
 let isGlobalBotEnabled = false;
 
+// Lock in-memory para evitar condiciones de carrera cuando Baileys y Webhook reciben el mismo mensaje simultáneamente
+const processingMessages = new Set<string>();
+
 export function getGlobalBotStatus(): boolean {
   return isGlobalBotEnabled;
 }
@@ -22,6 +25,13 @@ export function setGlobalBotStatus(enabled?: boolean): boolean {
 export async function handleIncomingMessage(phone: string, incomingText: string, name?: string, metaMessageId?: string) {
   // 1. Evitar duplicados si el mensaje ya existe
   if (metaMessageId) {
+    if (processingMessages.has(metaMessageId)) {
+      console.log(`[BOT] Ignorando mensaje duplicado en vuelo: ${metaMessageId}`);
+      return null;
+    }
+    processingMessages.add(metaMessageId);
+    setTimeout(() => processingMessages.delete(metaMessageId), 10000); // Liberar lock después de 10s
+
     const existingMsg = await prisma.message.findFirst({ where: { metaMessageId } });
     if (existingMsg) {
       const cust = await prisma.customer.findUnique({ where: { id: existingMsg.customerId }, include: { tags: { include: { tag: true } } } });

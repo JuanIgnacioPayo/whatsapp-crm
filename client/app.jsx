@@ -417,6 +417,7 @@ function App() {
   const [isSoundEnabled, setIsSoundEnabled] = useState(() => localStorage.getItem('crm_sound_enabled') !== 'false');
   const [soundVolume, setSoundVolume] = useState(() => Number(localStorage.getItem('crm_sound_volume')) || 80);
   const [soundType, setSoundType] = useState(() => localStorage.getItem('crm_sound_type') || 'chime');
+  const [isSending, setIsSending] = useState(false);
   const [showSoundModal, setShowSoundModal] = useState(false);
   
   // URL del Backend Dinámico (desde Firestore)
@@ -870,9 +871,10 @@ function App() {
 
   const handleSendMessage = async (e) => {
     e?.preventDefault();
-    if (!replyText.trim() || !selectedCustomerId || !dynamicApiBase) return;
+    if (!replyText.trim() || !selectedCustomerId || !dynamicApiBase || isSending) return;
 
     const textToSend = replyText;
+    setIsSending(true);
     setReplyText('');
     setShowQuickReplyMenu(false);
 
@@ -886,6 +888,8 @@ function App() {
       fetchMessages(selectedCustomerId);
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -1920,10 +1924,10 @@ function App() {
                   />
                   <button
                     type="submit"
-                    disabled={!replyText.trim()}
+                    disabled={!replyText.trim() || isSending}
                     className="bg-waAccent hover:bg-emerald-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow transition"
                   >
-                    Enviar 🚀
+                    {isSending ? 'Enviando...' : 'Enviar 🚀'}
                   </button>
                 </form>
               </>
