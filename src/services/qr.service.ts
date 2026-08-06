@@ -2,7 +2,8 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  WASocket
+  WASocket,
+  Browsers
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
@@ -63,7 +64,7 @@ export async function initBaileysEngine() {
       auth: state,
       printQRInTerminal: true,
       logger: pino({ level: 'silent' }) as any,
-      browser: ['Ubuntu', 'Chrome', '20.0.04'],
+      browser: Browsers.macOS('Desktop'),
       qrTimeout: 60000,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000
