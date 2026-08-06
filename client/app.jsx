@@ -1584,7 +1584,7 @@ function App() {
                         {systemSettings.theme === 'dark' ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
                       </button>
                       
-                      {userProfile?.role === 'admin' && (
+                      {userProfile?.role === 'admin' && isQrConnected && (
                         <>
                           <div className="border-t border-gray-700/50 my-1"></div>
                           <button 
