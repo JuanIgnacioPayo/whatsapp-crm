@@ -356,6 +356,8 @@ function App() {
   const [customers, setCustomers] = useState([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [products, setProducts] = useState([]);
   const [metadata, setMetadata] = useState({ operators: [], tags: [] });
   
@@ -646,6 +648,9 @@ function App() {
         setQrCodeData(null);
         setShowQrModal(false);
         if (data.phone) setConnectedPhone(data.phone);
+        // Cargar chats al conectar WhatsApp
+        setIsLoadingChats(true);
+        fetchCustomers().finally(() => setIsLoadingChats(false));
       }
     });
 
@@ -808,6 +813,8 @@ function App() {
   };
 
   const fetchCustomers = async () => {
+    const wasEmpty = customers.length === 0;
+    if (wasEmpty) setIsLoadingChats(true);
     try {
       const res = await fetch(`${dynamicApiBase}/customers?state=${stateFilter}&tag=${tagFilter}`);
       const data = await res.json();
@@ -819,10 +826,13 @@ function App() {
     } catch (e) {
       console.error(e);
       setCustomers([]);
+    } finally {
+      if (wasEmpty) setIsLoadingChats(false);
     }
   };
 
   const fetchMessages = async (customerId) => {
+    setIsLoadingMessages(true);
     try {
       const res = await fetch(`${dynamicApiBase}/customers/${customerId}/messages`);
       const data = await res.json();
@@ -830,6 +840,8 @@ function App() {
     } catch (e) {
       console.error(e);
       setMessages([]);
+    } finally {
+      setIsLoadingMessages(false);
     }
   };
 
@@ -1635,7 +1647,23 @@ function App() {
 
             {/* Lista de Conversaciones */}
             <div className="flex-1 overflow-y-auto divide-y divide-waBorder">
-              {filteredCustomers.length === 0 ? (
+              {isLoadingChats ? (
+                <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                  <div className="relative">
+                    <div className="w-12 h-12 border-4 border-waAccent/20 rounded-full"></div>
+                    <div className="w-12 h-12 border-4 border-waAccent border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+                  </div>
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-semibold text-waText">Sincronizando chats...</p>
+                    <p className="text-[11px] text-waTextMuted">Cargando conversaciones de WhatsApp</p>
+                  </div>
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-waAccent rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+                    <div className="w-2 h-2 bg-waAccent rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+                    <div className="w-2 h-2 bg-waAccent rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                  </div>
+                </div>
+              ) : filteredCustomers.length === 0 ? (
                 <div className="p-6 text-center text-xs text-waTextMuted">
                   No se encontraron conversaciones en esta vista.
                 </div>
@@ -1789,7 +1817,13 @@ function App() {
 
                 {/* Historial de Mensajes */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-waChatBg bg-wa-doodle">
-                  {messages.map((m) => {
+                  {isLoadingMessages ? (
+                    <div className="h-full flex flex-col items-center justify-center space-y-4">
+                      <div className="w-10 h-10 border-4 border-waAccent/20 rounded-full"></div>
+                      <div className="w-10 h-10 border-4 border-waAccent border-t-transparent rounded-full animate-spin absolute"></div>
+                      <p className="text-sm font-semibold text-waText bg-waDark/80 px-4 py-1.5 rounded-full backdrop-blur-sm">Cargando mensajes...</p>
+                    </div>
+                  ) : messages.map((m) => {
                     const isCustomer = m.senderType === 'CUSTOMER';
                     const isBot = m.senderType === 'BOT';
                     const isOperator = m.senderType === 'OPERATOR';
