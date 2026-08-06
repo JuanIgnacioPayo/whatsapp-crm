@@ -55,8 +55,8 @@ export async function receiveWebhookMessage(req: Request, res: Response) {
 
         console.log(`📩 Mensaje entrante de ${fromPhone} (${profileName || 'Anónimo'}): ${incomingText}`);
 
-        // Procesar el mensaje a través del motor del bot / CRM
-        await handleIncomingMessage(fromPhone, incomingText, profileName);
+        // Procesar el mensaje a través del motor del bot / CRM        const msgId = msg.id;
+        await handleIncomingMessage(fromPhone, incomingText, profileName, msgId);
       }
 
       // Meta exige responder 200 OK inmediatamente a todos los webhooks

@@ -19,8 +19,17 @@ export function setGlobalBotStatus(enabled?: boolean): boolean {
   return isGlobalBotEnabled;
 }
 
-export async function handleIncomingMessage(phone: string, incomingText: string, name?: string) {
-  // 1. Buscar o crear el cliente en la BD
+export async function handleIncomingMessage(phone: string, incomingText: string, name?: string, metaMessageId?: string) {
+  // 1. Evitar duplicados si el mensaje ya existe
+  if (metaMessageId) {
+    const existingMsg = await prisma.message.findFirst({ where: { metaMessageId } });
+    if (existingMsg) {
+      const cust = await prisma.customer.findUnique({ where: { id: existingMsg.customerId }, include: { tags: { include: { tag: true } } } });
+      return { customer: cust, userMessage: existingMsg };
+    }
+  }
+
+  // 2. Buscar o crear el cliente en la BD
   let customer = await prisma.customer.findUnique({
     where: { phone },
     include: { tags: { include: { tag: true } } }
@@ -44,7 +53,8 @@ export async function handleIncomingMessage(phone: string, incomingText: string,
       customerId: customer.id,
       senderType: 'CUSTOMER',
       text: incomingText,
-      status: 'READ'
+      status: 'READ',
+      metaMessageId: metaMessageId || undefined
     }
   });
 

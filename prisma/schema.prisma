@@ -22,6 +22,8 @@ model Customer {
   id                 String          @id @default(uuid())
   phone              String          @unique
   name               String?
+  profilePictureUrl  String?
+  about              String?
   conversationState  String          @default("BOT_ACTIVE") // BOT_ACTIVE, PENDING, IN_ATTENTION, CLOSED
   botStep            String          @default("STEP_1_WELCOME") // STEP_1_WELCOME, STEP_2_PROFILES, BOT_COMPLETED
   profileTag         String?         // Mayorista, Minorista, Soporte
@@ -61,6 +63,13 @@ model TagOnCustomer {
   @@id([customerId, tagId])
 }
 
+model QuickReply {
+  id        String   @id @default(uuid())
+  shortcut  String   @unique
+  text      String
+  createdAt DateTime @default(now())
+}
+
 model Product {
   id          String   @id @default(uuid())
   code        String   @unique
@@ -70,4 +79,10 @@ model Product {
   price       Float
   stock       Int      @default(100)
   createdAt   DateTime @default(now())
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

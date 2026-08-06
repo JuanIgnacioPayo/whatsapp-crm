@@ -301,3 +301,57 @@ export async function toggleCustomerBotHandler(req: Request, res: Response) {
     return res.status(500).json({ error: error.message });
   }
 }
+
+// 10. CRUD de Etiquetas Dinámicas (Tags)
+export async function getAllTags(req: Request, res: Response) {
+  try {
+    const tags = await prisma.tag.findMany({ orderBy: { name: 'asc' } });
+    return res.json(tags);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function createTag(req: Request, res: Response) {
+  try {
+    const { name, color } = req.body;
+    if (!name) return res.status(400).json({ error: 'El nombre es obligatorio' });
+    const tag = await prisma.tag.create({ data: { name, color: color || '#3B82F6' } });
+    return res.json(tag);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateTag(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { name, color } = req.body;
+    const tag = await prisma.tag.update({
+      where: { id },
+      data: { name, color }
+    });
+    
+    // Al actualizar el tag, notificar a los clientes conectados para que refresquen
+    const io = getIO();
+    io.emit('tags_updated', tag);
+    
+    return res.json(tag);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+export async function deleteTag(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    await prisma.tag.delete({ where: { id } });
+    
+    const io = getIO();
+    io.emit('tags_updated', { id, deleted: true });
+    
+    return res.json({ success: true });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+}

@@ -4,6 +4,7 @@
 .env.production
 *.pem
 *.key
+firebase-service-account.json
 
 # Base de Datos Local
 prisma/*.db

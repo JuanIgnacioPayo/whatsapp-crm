@@ -16,9 +16,29 @@ let currentQrDataUrl: string | null = null;
 let isConnected = false;
 let connectedUser: any = null;
 
+let systemSettingsCache: Record<string, string> = {
+  ignore_groups: 'true',
+  ignore_status: 'true'
+};
+
+export async function loadSystemSettings() {
+  const prisma = new (require('@prisma/client').PrismaClient)();
+  try {
+    const settings = await prisma.systemSetting.findMany();
+    for (const setting of settings) {
+      systemSettingsCache[setting.key] = setting.value;
+    }
+  } catch (error) {
+    console.error('Error loading system settings:', error);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 const AUTH_DIR = path.join(__dirname, '../../baileys_auth_info');
 
 export async function initBaileysEngine() {
+  await loadSystemSettings();
   try {
     if (!fs.existsSync(AUTH_DIR)) {
       fs.mkdirSync(AUTH_DIR, { recursive: true });
@@ -34,7 +54,7 @@ export async function initBaileysEngine() {
       auth: state,
       printQRInTerminal: true,
       logger: pino({ level: 'silent' }) as any,
-      browser: ['CRM WhatsApp', 'Chrome', '1.0.0'],
+      browser: ['Ubuntu', 'Chrome', '20.0.04'],
       qrTimeout: 60000,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000
@@ -101,14 +121,34 @@ export async function initBaileysEngine() {
     });
 
     // Escuchar la sincronización inicial del historial reciente de WhatsApp Web
-    sock.ev.on('messaging-history.set', async ({ chats, messages }) => {
-      console.log(`📚 [BAILEYS QR] Sincronizando historial reciente: ${chats?.length || 0} chats, ${messages?.length || 0} mensajes...`);
+    sock.ev.on('messaging-history.set', async ({ chats, messages, contacts }) => {
+      console.log(`📚 [BAILEYS QR] Sincronizando historial reciente: ${chats?.length || 0} chats, ${messages?.length || 0} mensajes, ${contacts?.length || 0} contactos...`);
+      
+      if (contacts && contacts.length > 0) {
+        const prisma = new (require('@prisma/client').PrismaClient)();
+        for (const contact of contacts) {
+          if (!contact.name) continue;
+          const phone = contact.id.replace('@s.whatsapp.net', '').replace('@c.us', '').split(':')[0];
+          try {
+            await prisma.customer.updateMany({
+              where: { phone: phone },
+              data: { name: contact.name }
+            });
+          } catch (e) {}
+        }
+      }
+
       if (!messages || messages.length === 0) return;
 
       for (const msg of messages) {
         try {
           const fromJid = msg.key.remoteJid;
-          if (!fromJid || fromJid.endsWith('@g.us') || fromJid === 'status@broadcast') continue;
+          
+          const ignoreGroups = systemSettingsCache['ignore_groups'] !== 'false';
+          const ignoreStatus = systemSettingsCache['ignore_status'] !== 'false';
+          if (!fromJid) continue;
+          if (ignoreGroups && fromJid.endsWith('@g.us')) continue;
+          if (ignoreStatus && fromJid === 'status@broadcast') continue;
 
           const fromPhone = fromJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
           const isFromMe = msg.key.fromMe;
@@ -157,6 +197,23 @@ export async function initBaileysEngine() {
       console.log(`✅ Sincronización del historial reciente completada.`);
     });
 
+    sock.ev.on('contacts.upsert', async (contacts) => {
+      console.log(`📚 [BAILEYS QR] Actualizando ${contacts.length} contactos de la agenda...`);
+      if (contacts && contacts.length > 0) {
+        const prisma = new (require('@prisma/client').PrismaClient)();
+        for (const contact of contacts) {
+          if (!contact.name) continue;
+          const phone = contact.id.replace('@s.whatsapp.net', '').replace('@c.us', '').split(':')[0];
+          try {
+            await prisma.customer.updateMany({
+              where: { phone: phone },
+              data: { name: contact.name }
+            });
+          } catch (e) {}
+        }
+      }
+    });
+
     sock.ev.on('messages.upsert', async (m) => {
       if (m.type !== 'notify') return;
 
@@ -165,7 +222,12 @@ export async function initBaileysEngine() {
         if (msg.key.fromMe) continue;
 
         const fromJid = msg.key.remoteJid;
-        if (!fromJid || fromJid.endsWith('@g.us')) continue; // Ignorar grupos por ahora
+        
+        const ignoreGroups = systemSettingsCache['ignore_groups'] !== 'false';
+        const ignoreStatus = systemSettingsCache['ignore_status'] !== 'false';
+        if (!fromJid) continue;
+        if (ignoreGroups && fromJid.endsWith('@g.us')) continue;
+        if (ignoreStatus && (fromJid === 'status@broadcast' || fromJid.endsWith('@newsletter') || fromJid.endsWith('@broadcast'))) continue;
 
         const fromPhone = fromJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
         const profileName = msg.pushName || undefined;
@@ -184,7 +246,36 @@ export async function initBaileysEngine() {
         console.log(`📩 [BAILEYS QR] Mensaje entrante de ${fromPhone} (${profileName || 'Anónimo'}): "${incomingText}"`);
 
         try {
-          await handleIncomingMessage(fromPhone, incomingText, profileName);
+          const prisma = new (require('@prisma/client').PrismaClient)();
+          let customer = await prisma.customer.findUnique({ where: { phone: fromPhone } });
+          // Obtener foto y estado si el cliente existe y no los tiene (lazy fetch para no bloquear)
+          if (customer && (!customer.profilePictureUrl || !customer.about)) {
+            try {
+              const ppUrl = await sock.profilePictureUrl(fromJid, 'preview').catch((err) => {
+                console.error(`Error fetching profile pic for ${fromJid}:`, err?.message);
+                return null;
+              });
+              const statusData = await sock.fetchStatus(fromJid).catch(() => null);
+              
+              if (ppUrl || statusData?.status) {
+                await prisma.customer.update({
+                  where: { phone: fromPhone },
+                  data: {
+                    profilePictureUrl: ppUrl || customer.profilePictureUrl,
+                    about: statusData?.status || customer.about
+                  }
+                });
+              }
+            } catch (e) {
+              console.error('Error fetching WA profile info:', e);
+            }
+          }
+        } catch (e) {
+          console.error('Error in DB check for profile info:', e);
+        }
+
+        try {
+          await handleIncomingMessage(fromPhone, incomingText, profileName, msg.key?.id);
         } catch (err) {
           console.error('Error procesando mensaje entrante en Baileys:', err);
         }

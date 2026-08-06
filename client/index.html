@@ -12,16 +12,21 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           fontFamily: { sans: ['Inter', 'sans-serif'] },
           colors: {
-            waDark: '#111827',
-            waSidebar: '#1F2937',
-            waChatBg: '#0F172A',
-            waBubbleOut: '#059669',
-            waBubbleIn: '#374151',
-            waAccent: '#10B981'
+            waDark: 'var(--waDark)',
+            waSidebar: 'var(--waSidebar)',
+            waHeader: 'var(--waHeader)',
+            waChatBg: 'var(--waChatBg)',
+            waBubbleOut: 'var(--waBubbleOut)',
+            waBubbleIn: 'var(--waBubbleIn)',
+            waAccent: 'var(--waAccent)',
+            waText: 'var(--waText)',
+            waTextMuted: 'var(--waTextMuted)',
+            waBorder: 'var(--waBorder)'
           }
         }
       }
@@ -41,14 +46,82 @@
   <!-- Babel Standalone for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
+    :root {
+      --waDark: #111b21;
+      --waSidebar: #111b21;
+      --waHeader: #202c33;
+      --waChatBg: #0b141a;
+      --waBubbleOut: #005c4b;
+      --waBubbleIn: #202c33;
+      --waAccent: #00a884;
+      --waText: #e9edef;
+      --waTextMuted: #8696a0;
+      --waBorder: #222d34;
+    }
+
+    .light-theme {
+      --waDark: #ffffff;
+      --waSidebar: #ffffff;
+      --waHeader: #f0f2f5;
+      --waChatBg: #efeae2;
+      --waBubbleOut: #d9fdd3;
+      --waBubbleIn: #ffffff;
+      --waAccent: #00a884;
+      --waText: #111b21;
+      --waTextMuted: #667781;
+      --waBorder: #d1d7db;
+    }
+
     /* Custom Scrollbars */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #4B5563; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #6B7280; }
+    ::-webkit-scrollbar-thumb { background: #374045; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #8696a0; }
+    
+    .light-theme ::-webkit-scrollbar-thumb { background: #d1d7db; }
+    
+    .bg-wa-doodle {
+      position: relative;
+    }
+    
+    .bg-wa-doodle::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+      background-repeat: repeat;
+      background-size: 400px auto;
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+    
+    .light-theme .bg-wa-doodle::before {
+      opacity: 0.06;
+    }
+
+
+    /* Explicit utilities to ensure they work regardless of Tailwind CDN JIT compiler */
+    .bg-waDark { background-color: var(--waDark) !important; }
+    .bg-waSidebar { background-color: var(--waSidebar) !important; }
+    .bg-waHeader { background-color: var(--waHeader) !important; }
+    .bg-waChatBg { background-color: var(--waChatBg) !important; }
+    .bg-waBubbleOut { background-color: var(--waBubbleOut) !important; }
+    .bg-waBubbleIn { background-color: var(--waBubbleIn) !important; }
+    
+    .text-waText { color: var(--waText) !important; }
+    .text-waTextMuted { color: var(--waTextMuted) !important; }
+    .text-waAccent { color: var(--waAccent) !important; }
+    
+    .border-waBorder { border-color: var(--waBorder) !important; }
   </style>
 </head>
-<body class="bg-gray-900 text-gray-100 font-sans antialiased overflow-hidden">
+<body class="font-sans antialiased overflow-hidden" style="background-color: var(--waDark); color: var(--waText);">
+  <script>
+    if (localStorage.getItem('crm_theme') === 'light') {
+      document.documentElement.classList.add('light-theme');
+    }
+  </script>
   <div id="root"></div>
 
   <!-- App React Source -->
