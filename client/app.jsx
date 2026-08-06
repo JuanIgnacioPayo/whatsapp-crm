@@ -650,8 +650,18 @@ function App() {
         setShowQrModal(false);
         if (data.phone) setConnectedPhone(data.phone);
         // Cargar chats al conectar WhatsApp
-        setIsLoadingChats(true);
-        fetchCustomers().finally(() => setIsLoadingChats(false));
+        if (user) {
+          setIsLoadingChats(true);
+          fetchCustomers().finally(() => setIsLoadingChats(false));
+        }
+        if (window.Swal) {
+          window.Swal.fire({
+            icon: 'success',
+            title: '¡Conexión Exitosa!',
+            text: 'La sesión de WhatsApp se ha vinculado correctamente. Ya puedes cerrar esta ventana o continuar con tus tareas.',
+            confirmButtonColor: '#10b981'
+          });
+        }
       }
     });
 
@@ -751,6 +761,25 @@ function App() {
     try {
       const res = await fetch(dynamicApiBase ? `${dynamicApiBase}/qr` : '/api/qr');
       const data = await res.json();
+      
+      if (data.connected && !isQrConnected) {
+        setQrCodeData(null);
+        setShowQrModal(false);
+        if (data.phone) setConnectedPhone(data.phone);
+        if (user) {
+          setIsLoadingChats(true);
+          fetchCustomers().finally(() => setIsLoadingChats(false));
+        }
+        if (window.Swal) {
+          window.Swal.fire({
+            icon: 'success',
+            title: '¡Conexión Exitosa!',
+            text: 'La sesión de WhatsApp se ha vinculado correctamente. Ya puedes cerrar esta ventana o continuar con tus tareas.',
+            confirmButtonColor: '#10b981'
+          });
+        }
+      }
+      
       setIsQrConnected(data.connected);
       if (data.qr) {
         setQrCodeData(data.qr);

@@ -64,7 +64,8 @@ export async function initBaileysEngine() {
       auth: state,
       printQRInTerminal: true,
       logger: pino({ level: 'silent' }) as any,
-      browser: Browsers.macOS('Desktop'),
+      browser: Browsers.ubuntu('Chrome'),
+      generateHighQualityLinkPreview: true,
       qrTimeout: 60000,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000
@@ -108,8 +109,8 @@ export async function initBaileysEngine() {
       }
 
       if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
-        console.log(`⚠️ Conexión de WhatsApp cerrada. ¿Reconectar?: ${shouldReconnect}`);
+        const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+        console.log(`⚠️ Conexión de WhatsApp cerrada. Status: ${(lastDisconnect?.error as Boom)?.output?.statusCode}, Razón: ${(lastDisconnect?.error as Error)?.message}, ¿Reconectar?:`, shouldReconnect);
         
         isConnected = false;
         connectedUser = null;
