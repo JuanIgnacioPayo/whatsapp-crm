@@ -12,7 +12,8 @@ import {
   getAllTags,
   createTag,
   updateTag,
-  deleteTag
+  deleteTag,
+  deleteAllCustomers
 } from './controllers/crm.controller';
 
 const router = Router();
@@ -23,6 +24,7 @@ router.post('/webhook', receiveWebhookMessage);
 
 // CRM API Endpoints
 router.get('/api/customers', getCustomers);
+router.delete('/api/customers', deleteAllCustomers);
 router.get('/api/customers/:id/messages', getCustomerMessages);
 router.post('/api/customers/:id/messages', sendOperatorMessage);
 router.patch('/api/customers/:id/state', updateCustomerState);

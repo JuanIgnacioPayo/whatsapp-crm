@@ -71,6 +71,18 @@ export async function getCustomers(req: Request, res: Response) {
   }
 }
 
+// 1.5. Eliminar TODOS los clientes y mensajes (wipe db)
+export async function deleteAllCustomers(req: Request, res: Response) {
+  try {
+    // Delete all customers (Prisma's onDelete: Cascade should delete messages/tags)
+    await prisma.customer.deleteMany({});
+    res.json({ success: true, message: 'Todos los chats fueron eliminados.' });
+  } catch (error) {
+    console.error('Error wiping customers:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 // 2. Obtener historial de mensajes de un cliente
 export async function getCustomerMessages(req: Request, res: Response) {
   try {
