@@ -749,7 +749,7 @@ function App() {
 
   const fetchQrStatus = async () => {
     try {
-      const res = await fetch(`${dynamicApiBase}/qr`);
+      const res = await fetch(dynamicApiBase ? `${dynamicApiBase}/qr` : '/api/qr');
       const data = await res.json();
       setIsQrConnected(data.connected);
       if (data.qr) {
@@ -764,7 +764,7 @@ function App() {
 
   const fetchGlobalBotStatus = async () => {
     try {
-      const res = await fetch(`${dynamicApiBase}/bot/global`);
+      const res = await fetch(dynamicApiBase ? `${dynamicApiBase}/bot/global` : '/api/bot/global');
       const data = await res.json();
       setIsGlobalBotEnabled(data.enabled);
     } catch (e) {
