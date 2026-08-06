@@ -706,7 +706,8 @@ function App() {
 
   // 5. Temporizador de cuenta regresiva para la validez del Código QR
   useEffect(() => {
-    if (!showQrModal || isQrConnected || !qrCodeData) return;
+    const shouldPoll = showQrModal || authTab === 'qr';
+    if (!shouldPoll || isQrConnected || !qrCodeData) return;
 
     const interval = setInterval(() => {
       setQrSecondsLeft((prev) => {
@@ -719,7 +720,14 @@ function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [showQrModal, isQrConnected, qrCodeData]);
+  }, [showQrModal, authTab, isQrConnected, qrCodeData]);
+
+  // Efecto: Cargar QR inicial al abrir pestaña de vinculación sin login
+  useEffect(() => {
+    if (authTab === 'qr') {
+      fetchQrStatus();
+    }
+  }, [authTab]);
 
   // 6. Efecto: Cargar mensajes de chat seleccionados
   useEffect(() => {
@@ -1220,19 +1228,62 @@ function App() {
             >
               Registrarse
             </button>
+            <button
+              onClick={() => { setAuthTab('qr'); setAuthError(''); }}
+              className={`flex-1 py-4 text-sm font-semibold border-b-2 transition ${authTab === 'qr' ? 'border-emerald-500 text-emerald-400 bg-gray-900/50' : 'border-transparent text-waTextMuted hover:text-waText'}`}
+            >
+              Vincular WhatsApp
+            </button>
           </div>
 
           <div className="p-8 space-y-6">
             <div className="text-center">
               <h2 className="text-lg font-bold text-waText">CRM WhatsApp Multioperador</h2>
-              <p className="text-xs text-waTextMuted mt-1">Acceso seguro con Firebase Authentication</p>
+              <p className="text-xs text-waTextMuted mt-1">{authTab === 'qr' ? 'Vincular línea de WhatsApp' : 'Acceso seguro con Firebase Authentication'}</p>
             </div>
 
-            {authError && (
-              <div className="bg-red-950/60 border border-red-800/40 text-red-300 text-xs px-3.5 py-2.5 rounded-lg">
-                ⚠️ {authError}
+            {authTab === 'qr' ? (
+              <div className="flex flex-col items-center justify-center space-y-6">
+                {isQrConnected ? (
+                  <div className="bg-emerald-900/40 border border-emerald-500/50 rounded-xl p-6 text-center space-y-4">
+                    <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-emerald-400">¡Conexión Exitosa!</h3>
+                    <p className="text-sm text-emerald-100">
+                      Hola, la sesión de WhatsApp se ha iniciado correctamente y has finalizado tu tarea.
+                    </p>
+                    <button
+                      onClick={() => setAuthTab('login')}
+                      className="mt-4 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition shadow-lg"
+                    >
+                      Volver al Login
+                    </button>
+                  </div>
+                ) : qrCodeData ? (
+                  <div className="space-y-4 text-center w-full">
+                    <div className="bg-white p-4 rounded-xl inline-block shadow-inner border border-gray-300 relative mx-auto">
+                      <img src={qrCodeData} alt="Código QR WhatsApp" className="w-56 h-56" />
+                    </div>
+                    <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+                      <p className="text-sm text-waTextMuted mb-2">Escanea el código QR desde la aplicación de WhatsApp en tu celular.</p>
+                      <p className="text-xs font-mono text-emerald-500">Expira en {qrSecondsLeft}s</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-12 space-y-4 text-center">
+                    <div className="w-12 h-12 rounded-full border-4 border-emerald-500/30 border-t-emerald-500 animate-spin mx-auto"></div>
+                    <p className="text-sm text-waTextMuted">Generando código QR...</p>
+                  </div>
+                )}
               </div>
-            )}
+            ) : (
+              <>
+                {authError && (
+                  <div className="bg-red-950/60 border border-red-800/40 text-red-300 text-xs px-3.5 py-2.5 rounded-lg">
+                    ⚠️ {authError}
+                  </div>
+                )}
 
             <form onSubmit={authTab === 'login' ? handleLogin : handleRegister} className="space-y-4">
               {authTab === 'register' && (
@@ -1309,6 +1360,8 @@ function App() {
               <span>Continuar con Google</span>
             </button>
           </div>
+          </>
+            )}
         </div>
       </div>
     );
