@@ -22,16 +22,25 @@ let systemSettingsCache: Record<string, string> = {
 };
 
 export async function loadSystemSettings() {
-  const prisma = new (require('@prisma/client').PrismaClient)();
   try {
-    const settings = await prisma.systemSetting.findMany();
-    for (const setting of settings) {
-      systemSettingsCache[setting.key] = setting.value;
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    try {
+      if (prisma.systemSetting && typeof prisma.systemSetting.findMany === 'function') {
+        const settings = await prisma.systemSetting.findMany();
+        for (const setting of settings) {
+          systemSettingsCache[setting.key] = setting.value;
+        }
+      } else {
+        console.log('⚠️ Modelo SystemSetting no disponible, usando valores por defecto.');
+      }
+    } catch (error) {
+      console.error('Error loading system settings:', error);
+    } finally {
+      await prisma.$disconnect();
     }
-  } catch (error) {
-    console.error('Error loading system settings:', error);
-  } finally {
-    await prisma.$disconnect();
+  } catch (e) {
+    console.error('⚠️ PrismaClient no disponible para cargar settings, usando valores por defecto.');
   }
 }
 

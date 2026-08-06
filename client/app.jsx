@@ -1039,6 +1039,25 @@ function App() {
   };
 
   const handleSignOut = () => {
+    // Limpiar todo el estado del CRM antes de cerrar sesión
+    setCustomers([]);
+    setMessages([]);
+    setSelectedCustomerId(null);
+    setProducts([]);
+    setMetadata({ operators: [], tags: [] });
+    setReplyText('');
+    setSearchQuery('');
+    setStateFilter('ALL');
+    setTagFilter('ALL');
+    setCurrentView('crm');
+    setQrCodeData(null);
+    setIsQrConnected(false);
+    setConnectedPhone(null);
+    setShowQrModal(false);
+    setAllUsers([]);
+    setShowSettingsMenu(false);
+    setShowSoundModal(false);
+    // Finalmente cerrar sesión de Firebase
     firebase.auth().signOut();
   };
 
