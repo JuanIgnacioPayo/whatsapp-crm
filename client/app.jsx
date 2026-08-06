@@ -1608,6 +1608,14 @@ function App() {
                           </button>
                         </>
                       )}
+                      
+                      <div className="border-t border-gray-700/50 my-1"></div>
+                      <button 
+                        onClick={handleSignOut}
+                        className="w-full text-left px-4 py-2 hover:bg-waDark text-waText transition flex items-center gap-2"
+                      >
+                        🚪 Cerrar Sesión del CRM
+                      </button>
                     </div>
                   )}
                 </div>
