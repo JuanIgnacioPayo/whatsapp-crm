@@ -316,3 +316,33 @@ export function getWhatsAppStatus() {
     ttl: 60
   };
 }
+
+export async function disconnectWhatsApp() {
+  if (sock) {
+    console.log('🔒 Cerrando sesión de WhatsApp por solicitud...');
+    try {
+      await sock.logout();
+    } catch (e) {
+      console.error('Error al cerrar sesión de WhatsApp:', e);
+    }
+  }
+  
+  if (fs.existsSync(AUTH_DIR)) {
+    console.log('🗑️ Limpiando credenciales (baileys_auth_info)...');
+    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+  }
+  
+  isConnected = false;
+  connectedUser = null;
+  currentQrDataUrl = null;
+  sock = null;
+  
+  try {
+    const io = getIO();
+    io.emit('whatsapp_status', { connected: false });
+  } catch (e) {}
+
+  console.log('🔄 Reiniciando motor Baileys en 3 segundos...');
+  setTimeout(() => initBaileysEngine(), 3000);
+  return { success: true };
+}

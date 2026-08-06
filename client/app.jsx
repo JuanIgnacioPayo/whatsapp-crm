@@ -49,9 +49,15 @@ const handleUserSetup = async (firebaseUser) => {
 
     if (doc.exists) {
       const data = doc.data();
-      if (isPrimaryAdmin) {
+      if (isPrimaryAdmin && (!data.active || data.role !== 'admin')) {
         data.active = true;
         data.role = 'admin';
+        try {
+          // Asegurar que el rol de admin se guarde en la BD si no estaba
+          await userRef.update({ active: true, role: 'admin' });
+        } catch (updateErr) {
+          console.warn("Advertencia: No se pudo actualizar el rol de admin en Firestore", updateErr.message);
+        }
       }
       return data;
     }
@@ -70,6 +76,9 @@ const handleUserSetup = async (firebaseUser) => {
       await userRef.set(newUser);
     } catch (writeErr) {
       console.warn("Advertencia: No se pudo guardar el perfil en Firestore:", writeErr.message);
+      if (writeErr.message.includes('permission')) {
+        alert("Atención: No tienes permisos para crear tu perfil en la base de datos. Pide al administrador que suba las reglas de Firestore (firebase deploy --only firestore:rules).");
+      }
     }
 
     return newUser;
@@ -544,7 +553,12 @@ function App() {
           }
         }
         prevPendingCountRef.current = pendingCount;
-      }, (err) => console.error("Error al listar usuarios:", err));
+      }, (err) => {
+        console.error("Error al listar usuarios:", err);
+        if (err.message.includes('permission')) {
+          alert('Error de permisos en Firestore. Asegúrate de haber subido las reglas de seguridad ejecutando "firebase deploy --only firestore:rules" en tu terminal.');
+        }
+      });
 
       return () => unsubscribe();
     } catch (e) {
@@ -995,9 +1009,9 @@ function App() {
     setAuthLoading(true);
     try {
       const cred = await firebase.auth().createUserWithEmailAndPassword(authEmail, authPassword);
-      if (cred.user) {
+      if (cred.user && authDisplayName) {
         await cred.user.updateProfile({ displayName: authDisplayName });
-        await handleUserSetup(cred.user);
+        // NOTA: No llamamos a handleUserSetup aquí porque onAuthStateChanged ya lo hace automáticamente.
       }
     } catch (err) {
       console.error(err);
@@ -1012,10 +1026,8 @@ function App() {
     setAuthLoading(true);
     try {
       const provider = new firebase.auth.GoogleAuthProvider();
-      const cred = await firebase.auth().signInWithPopup(provider);
-      if (cred.user) {
-        await handleUserSetup(cred.user);
-      }
+      await firebase.auth().signInWithPopup(provider);
+      // NOTA: onAuthStateChanged manejará el setup.
     } catch (err) {
       console.error("Google Sign-In Error:", err);
       if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
@@ -1048,6 +1060,19 @@ function App() {
     } catch (e) {
       console.error(e);
       alert("Error al cambiar estado de usuario");
+    }
+  };
+
+  const handleDisconnectWhatsApp = async () => {
+    if (!confirm("⚠️ ¿Estás seguro de que deseas desconectar la línea de WhatsApp actual? Esto borrará la sesión y requerirá escanear un nuevo código QR para continuar operando.")) return;
+    try {
+      await fetch(dynamicApiBase ? `${dynamicApiBase}/qr/disconnect` : '/api/qr/disconnect', { method: 'POST' });
+      alert("Se envió la señal de desconexión. El sistema generará un nuevo código QR en unos segundos.");
+      setShowSettingsMenu(false);
+      setShowQrModal(true); // Abrir el modal para esperar el nuevo QR
+    } catch (e) {
+      console.error(e);
+      alert("Error al intentar desconectar WhatsApp.");
     }
   };
 
@@ -1533,6 +1558,19 @@ function App() {
                       >
                         {systemSettings.theme === 'dark' ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
                       </button>
+                      
+                      {userProfile?.role === 'admin' && (
+                        <>
+                          <div className="border-t border-gray-700/50 my-1"></div>
+                          <button 
+                            onClick={handleDisconnectWhatsApp}
+                            className="w-full text-left px-4 py-2 hover:bg-red-900/40 text-red-400 transition flex items-center gap-2"
+                          >
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+                            Desconectar WhatsApp
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

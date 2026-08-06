@@ -7,31 +7,31 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Obtener los datos del perfil del usuario autenticado
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
-    // Verificar si el usuario está activo y aprobado
-    function isActive() {
-      return isAuthenticated() && getUserData().active == true;
-    }
-    
-    // Verificar si el usuario tiene rol de Administrador
+    // Verificar de forma segura si el usuario tiene rol de Administrador
     function isAdmin() {
-      return isAuthenticated() && getUserData().role == 'admin';
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Configuración del Backend (URL del Túnel): Cualquier usuario autenticado puede leerla
+    // Configuración del Backend (URL del Túnel)
     match /config/backend {
       allow read: if isAuthenticated();
-      allow write: if false; // El backend (Admin SDK) es el único con acceso de escritura
+      allow write: if false; 
     }
 
     // Colección de Usuarios
     match /users/{userId} {
-      // Cualquier usuario autenticado puede leer y gestionar su propio perfil o consultar usuarios
-      allow read, create, update: if isAuthenticated();
+      // Cualquier usuario autenticado puede leer la lista de usuarios
+      allow read: if isAuthenticated();
+      
+      // Solo puede crear su PROPIO perfil al registrarse
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Puede actualizar su propio perfil (ej. cambiar nombre) o si es admin
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      
+      // Solo el admin puede eliminar usuarios
       allow delete: if isAdmin();
     }
   }

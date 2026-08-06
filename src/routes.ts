@@ -56,12 +56,17 @@ import {
   toggleGlobalBotHandler,
   toggleCustomerBotHandler
 } from './controllers/crm.controller';
-import { getWhatsAppStatus } from './services/qr.service';
+import { getWhatsAppStatus, disconnectWhatsApp } from './services/qr.service';
 
 import settingsRouter from './routes/settings.routes';
 
 router.get('/api/qr', (req, res) => {
   res.json(getWhatsAppStatus());
+});
+
+router.post('/api/qr/disconnect', async (req, res) => {
+  const result = await disconnectWhatsApp();
+  res.json(result);
 });
 
 router.use('/api/settings', settingsRouter);
