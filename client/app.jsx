@@ -1359,9 +1359,9 @@ function App() {
               </svg>
               <span>Continuar con Google</span>
             </button>
-          </div>
           </>
-            )}
+          )}
+          </div>
         </div>
       </div>
     );
