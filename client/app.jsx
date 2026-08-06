@@ -1086,9 +1086,15 @@ function App() {
     if (!confirm("⚠️ ¿Estás seguro de que deseas desconectar la línea de WhatsApp actual? Esto borrará la sesión y requerirá escanear un nuevo código QR para continuar operando.")) return;
     try {
       await fetch(dynamicApiBase ? `${dynamicApiBase}/qr/disconnect` : '/api/qr/disconnect', { method: 'POST' });
-      alert("Se envió la señal de desconexión. El sistema generará un nuevo código QR en unos segundos.");
+      // Limpiar estado del CRM
+      setCustomers([]);
+      setMessages([]);
+      setSelectedCustomerId(null);
+      setQrCodeData(null);
+      setIsQrConnected(false);
+      setConnectedPhone(null);
       setShowSettingsMenu(false);
-      setShowQrModal(true); // Abrir el modal para esperar el nuevo QR
+      setShowQrModal(true);
     } catch (e) {
       console.error(e);
       alert("Error al intentar desconectar WhatsApp.");
