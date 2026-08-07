@@ -69,7 +69,7 @@ import {
   toggleGlobalBotHandler,
   toggleCustomerBotHandler
 } from './controllers/crm.controller';
-import { getWhatsAppStatus, disconnectWhatsApp } from './services/qr.service';
+import { getWhatsAppStatus, disconnectWhatsApp, getPairingCode } from './services/qr.service';
 
 import settingsRouter from './routes/settings.routes';
 
@@ -80,6 +80,17 @@ router.get('/api/qr', (req, res) => {
 router.post('/api/qr/disconnect', async (req, res) => {
   const result = await disconnectWhatsApp();
   res.json(result);
+});
+
+router.post('/api/qr/pair', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) return res.status(400).json({ error: 'Se requiere el número de teléfono' });
+    const code = await getPairingCode(phoneNumber);
+    res.json({ code });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.use('/api/settings', settingsRouter);

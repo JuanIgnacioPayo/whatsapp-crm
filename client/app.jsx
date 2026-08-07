@@ -414,6 +414,11 @@ function App() {
   
   // Estados para Código QR y WhatsApp Session
   const [qrCodeData, setQrCodeData] = useState(null);
+
+  const [phoneNumberForPairing, setPhoneNumberForPairing] = useState('');
+  const [pairingCode, setPairingCode] = useState('');
+  const [isPairingLoading, setIsPairingLoading] = useState(false);
+
   const [isQrConnected, setIsQrConnected] = useState(false);
   const [connectedExternalId, setConnectedExternalId] = useState(null);
   const [showQrModal, setShowQrModal] = useState(false);
