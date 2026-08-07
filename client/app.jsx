@@ -1096,6 +1096,35 @@ function App() {
   };
 
   // Funciones de Autenticación de Firebase
+
+  const handleRequestPairingCode = async () => {
+    if (!phoneNumberForPairing) return alert('Por favor, ingresa el número de teléfono de WhatsApp (ej: 54911...)');
+    
+    setIsPairingLoading(true);
+    setPairingCode('');
+    
+    try {
+      const sanitized = phoneNumberForPairing.replace(/[^0-9]/g, '');
+      const res = await fetch(`${dynamicApiBase}/qr/pair`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: sanitized })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al solicitar el código.');
+      }
+      
+      setPairingCode(data.code);
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setIsPairingLoading(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!authEmail || !authPassword) {
