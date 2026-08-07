@@ -6,11 +6,12 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { PrismaClient } from '@prisma/client';
-import { usePrismaAuthState } from './prisma-auth.service';
+import { useMultiFileAuthState } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import path from 'path';
 import fs from 'fs';
+import AdmZip from 'adm-zip';
 import { handleIncomingMessage } from './bot.service';
 import { getIO } from './socket.service';
 
@@ -49,15 +50,52 @@ export async function loadSystemSettings() {
 
 const AUTH_DIR = path.join(__dirname, '../../baileys_auth_info');
 
+export async function backupAuthToDb(prisma: PrismaClient) {
+  try {
+    if (!fs.existsSync(AUTH_DIR)) return;
+    const zip = new AdmZip();
+    zip.addLocalFolder(AUTH_DIR);
+    const zipBuffer = zip.toBuffer();
+    const dataString = zipBuffer.toString('base64');
+    
+    await prisma.baileysSession.upsert({
+      where: { sessionId_id: { sessionId: 'default', id: 'ZIP' } },
+      create: { sessionId: 'default', id: 'ZIP', data: dataString },
+      update: { data: dataString }
+    });
+    console.log('✅ Auth Backup guardado en DB');
+  } catch (e) {
+    console.error('Error guardando backup de Auth:', e);
+  }
+}
+
+export async function restoreAuthFromDb(prisma: PrismaClient) {
+  try {
+    const record = await prisma.baileysSession.findUnique({
+      where: { sessionId_id: { sessionId: 'default', id: 'ZIP' } }
+    });
+    
+    if (record && record.data) {
+      if (!fs.existsSync(AUTH_DIR)) {
+        fs.mkdirSync(AUTH_DIR, { recursive: true });
+      }
+      const zipBuffer = Buffer.from(record.data, 'base64');
+      const zip = new AdmZip(zipBuffer);
+      zip.extractAllTo(AUTH_DIR, true);
+      console.log('✅ Auth restaurado desde DB');
+    }
+  } catch (e) {
+    console.error('Error restaurando Auth desde DB:', e);
+  }
+}
+
 export async function initBaileysEngine() {
   await loadSystemSettings();
   try {
-    if (!fs.existsSync(AUTH_DIR)) {
-      fs.mkdirSync(AUTH_DIR, { recursive: true });
-    }
-
     const prisma = new PrismaClient();
-    const { state, saveCreds } = await usePrismaAuthState('default', prisma);
+    await restoreAuthFromDb(prisma);
+
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
     const { version } = await fetchLatestBaileysVersion();
 
     console.log(`⚡ Iniciando motor WhatsApp (Baileys v${version.join('.')})...`);
@@ -75,6 +113,11 @@ export async function initBaileysEngine() {
     });
 
     sock.ev.on('creds.update', saveCreds);
+
+    // Backup to DB every 2 minutes instead of every creds update to prevent CPU/DB overload
+    setInterval(() => {
+      backupAuthToDb(prisma);
+    }, 120000);
 
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -98,6 +141,9 @@ export async function initBaileysEngine() {
       if (connection === 'open') {
         console.log('✅ ¡WhatsApp vinculado y conectado por Código QR exitosamente!');
         isConnected = true;
+        
+        // Backup immediately on successful connection
+        backupAuthToDb(prisma);
         currentQrDataUrl = null;
         connectedUser = sock?.user || null;
 
