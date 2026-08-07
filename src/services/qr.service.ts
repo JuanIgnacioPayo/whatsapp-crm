@@ -109,7 +109,7 @@ export async function initBaileysEngine() {
       },
       printQRInTerminal: true,
       logger: pino({ level: 'debug' }, pino.destination(path.join(__dirname, '../../baileys.log'))) as any,
-      browser: Browsers.macOS('Desktop'),
+      browser: Browsers.ubuntu('Chrome'),
       generateHighQualityLinkPreview: true,
       qrTimeout: 120000,
       connectTimeoutMs: 120000,
