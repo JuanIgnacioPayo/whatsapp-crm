@@ -26,10 +26,13 @@ app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 const qr_service_1 = require("./services/qr.service");
+const scheduler_service_1 = require("./services/scheduler.service");
 // Socket.io initialization
 (0, socket_service_1.initSocketServer)(server);
 // Baileys WhatsApp Engine initialization
 (0, qr_service_1.initBaileysEngine)();
+// Start Scheduled Messages cron
+(0, scheduler_service_1.startScheduler)();
 // Routes
 app.use('/', routes_1.default);
 // Servir frontend en http://localhost:3000

@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const webhook_controller_1 = require("./controllers/webhook.controller");
 const crm_controller_1 = require("./controllers/crm.controller");
+const scheduled_messages_controller_1 = require("./controllers/scheduled-messages.controller");
 const router = (0, express_1.Router)();
 // Meta WhatsApp Cloud API Webhook Endpoints
 router.get('/webhook', webhook_controller_1.verifyWebhook);
@@ -17,6 +18,10 @@ router.get('/api/customers/:id/messages', crm_controller_1.getCustomerMessages);
 router.post('/api/customers/:id/messages', crm_controller_1.sendOperatorMessage);
 router.patch('/api/customers/:id/state', crm_controller_1.updateCustomerState);
 router.post('/api/customers/:id/tags', crm_controller_1.toggleCustomerTag);
+// Scheduled Messages
+router.get('/api/customers/:id/scheduled-messages', scheduled_messages_controller_1.getScheduledMessages);
+router.post('/api/customers/:id/scheduled-messages', scheduled_messages_controller_1.createScheduledMessage);
+router.delete('/api/scheduled-messages/:msgId', scheduled_messages_controller_1.deleteScheduledMessage);
 // Tags CRUD
 router.get('/api/tags', crm_controller_1.getAllTags);
 router.post('/api/tags', crm_controller_1.createTag);
@@ -40,6 +45,29 @@ router.get('/api/qr', (req, res) => {
 router.post('/api/qr/disconnect', async (req, res) => {
     const result = await (0, qr_service_1.disconnectWhatsApp)();
     res.json(result);
+});
+router.post('/api/qr/pair', async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+        if (!phoneNumber)
+            return res.status(400).json({ error: 'Se requiere el número de teléfono' });
+        const code = await (0, qr_service_1.getPairingCode)(phoneNumber);
+        res.json({ code });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+router.get('/api/logs', (req, res) => {
+    const logPath = path_1.default.join(__dirname, '../../baileys.log');
+    if (fs_1.default.existsSync(logPath)) {
+        res.sendFile(logPath);
+    }
+    else {
+        res.send('No logs available yet. Try connecting first.');
+    }
 });
 router.use('/api/settings', settings_routes_1.default);
 router.get('/api/bot/global', crm_controller_2.getGlobalBotStatusHandler);

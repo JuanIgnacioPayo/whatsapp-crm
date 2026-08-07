@@ -37,17 +37,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.loadSystemSettings = loadSystemSettings;
+exports.backupAuthToDb = backupAuthToDb;
+exports.restoreAuthFromDb = restoreAuthFromDb;
 exports.initBaileysEngine = initBaileysEngine;
 exports.sendWhatsAppMessageViaQR = sendWhatsAppMessageViaQR;
 exports.getWhatsAppStatus = getWhatsAppStatus;
 exports.disconnectWhatsApp = disconnectWhatsApp;
+exports.getPairingCode = getPairingCode;
 const baileys_1 = __importStar(require("@whiskeysockets/baileys"));
 const client_1 = require("@prisma/client");
-const prisma_auth_service_1 = require("./prisma-auth.service");
+const baileys_2 = require("@whiskeysockets/baileys");
 const qrcode_1 = __importDefault(require("qrcode"));
 const pino_1 = __importDefault(require("pino"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const adm_zip_1 = __importDefault(require("adm-zip"));
 const bot_service_1 = require("./bot.service");
 const socket_service_1 = require("./socket.service");
 let sock = null;
@@ -85,28 +89,72 @@ async function loadSystemSettings() {
     }
 }
 const AUTH_DIR = path_1.default.join(__dirname, '../../baileys_auth_info');
+async function backupAuthToDb(prisma) {
+    try {
+        if (!fs_1.default.existsSync(AUTH_DIR))
+            return;
+        const zip = new adm_zip_1.default();
+        zip.addLocalFolder(AUTH_DIR);
+        const zipBuffer = zip.toBuffer();
+        const dataString = zipBuffer.toString('base64');
+        await prisma.baileysSession.upsert({
+            where: { sessionId_id: { sessionId: 'default', id: 'ZIP' } },
+            create: { sessionId: 'default', id: 'ZIP', data: dataString },
+            update: { data: dataString }
+        });
+        console.log('✅ Auth Backup guardado en DB');
+    }
+    catch (e) {
+        console.error('Error guardando backup de Auth:', e);
+    }
+}
+async function restoreAuthFromDb(prisma) {
+    try {
+        const record = await prisma.baileysSession.findUnique({
+            where: { sessionId_id: { sessionId: 'default', id: 'ZIP' } }
+        });
+        if (record && record.data) {
+            if (!fs_1.default.existsSync(AUTH_DIR)) {
+                fs_1.default.mkdirSync(AUTH_DIR, { recursive: true });
+            }
+            const zipBuffer = Buffer.from(record.data, 'base64');
+            const zip = new adm_zip_1.default(zipBuffer);
+            zip.extractAllTo(AUTH_DIR, true);
+            console.log('✅ Auth restaurado desde DB');
+        }
+    }
+    catch (e) {
+        console.error('Error restaurando Auth desde DB:', e);
+    }
+}
 async function initBaileysEngine() {
     await loadSystemSettings();
     try {
-        if (!fs_1.default.existsSync(AUTH_DIR)) {
-            fs_1.default.mkdirSync(AUTH_DIR, { recursive: true });
-        }
         const prisma = new client_1.PrismaClient();
-        const { state, saveCreds } = await (0, prisma_auth_service_1.usePrismaAuthState)('default', prisma);
+        await restoreAuthFromDb(prisma);
+        const { state, saveCreds } = await (0, baileys_2.useMultiFileAuthState)(AUTH_DIR);
         const { version } = await (0, baileys_1.fetchLatestBaileysVersion)();
         console.log(`⚡ Iniciando motor WhatsApp (Baileys v${version.join('.')})...`);
         sock = (0, baileys_1.default)({
             version,
-            auth: state,
+            auth: {
+                creds: state.creds,
+                keys: (0, baileys_1.makeCacheableSignalKeyStore)(state.keys, (0, pino_1.default)({ level: 'silent' })),
+            },
             printQRInTerminal: true,
-            logger: (0, pino_1.default)({ level: 'silent' }),
-            browser: baileys_1.Browsers.ubuntu('Chrome'),
+            logger: (0, pino_1.default)({ level: 'debug' }, pino_1.default.destination(path_1.default.join(__dirname, '../../baileys.log'))),
+            browser: baileys_1.Browsers.macOS('Desktop'),
             generateHighQualityLinkPreview: true,
-            qrTimeout: 60000,
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000
+            qrTimeout: 120000,
+            connectTimeoutMs: 120000,
+            defaultQueryTimeoutMs: 120000,
+            keepAliveIntervalMs: 30000
         });
         sock.ev.on('creds.update', saveCreds);
+        // Backup to DB every 2 minutes instead of every creds update to prevent CPU/DB overload
+        setInterval(() => {
+            backupAuthToDb(prisma);
+        }, 120000);
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
             if (qr) {
@@ -128,6 +176,8 @@ async function initBaileysEngine() {
             if (connection === 'open') {
                 console.log('✅ ¡WhatsApp vinculado y conectado por Código QR exitosamente!');
                 isConnected = true;
+                // Backup immediately on successful connection
+                backupAuthToDb(prisma);
                 currentQrDataUrl = null;
                 connectedUser = sock?.user || null;
                 try {
@@ -396,4 +446,15 @@ async function disconnectWhatsApp() {
     console.log('🔄 Reiniciando motor Baileys en 3 segundos...');
     setTimeout(() => initBaileysEngine(), 3000);
     return { success: true };
+}
+async function getPairingCode(phoneNumber) {
+    if (!sock)
+        throw new Error('Motor de WhatsApp no inicializado.');
+    const sanitized = phoneNumber.replace(/[^0-9]/g, '');
+    if (sock.authState?.creds?.me?.id) {
+        throw new Error('Ya hay una sesión de WhatsApp conectada.');
+    }
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    const code = await sock.requestPairingCode(sanitized);
+    return code;
 }
