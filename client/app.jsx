@@ -449,6 +449,13 @@ function App() {
   // Estado para administración de usuarios
   const [allUsers, setAllUsers] = useState([]);
 
+  // Scheduled Messages
+  const [scheduledMessages, setScheduledMessages] = useState([]);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [scheduleText, setScheduleText] = useState('');
+  const [scheduleDate, setScheduleDate] = useState('');
+
+
   const messagesEndRef = useRef(null);
   const chatInputRef = useRef(null);
 
@@ -681,6 +688,12 @@ function App() {
       fetchCustomers(); // Actualizar la vista de clientes para reflejar cambios en etiquetas
     });
 
+    socket.on('scheduledMessageSent', (data) => {
+      if (data.customerId === selectedCustomerIdRef.current) {
+        fetchScheduledMessages(selectedCustomerIdRef.current);
+      }
+    });
+
     socket.on('new_message', (newMsg) => {
       if (newMsg.senderType === 'CUSTOMER' && isSoundEnabled) {
         playNotificationSound(soundType, soundVolume);
@@ -875,6 +888,47 @@ function App() {
       if (wasEmpty) setIsLoadingChats(false);
     }
   };
+
+  
+  const fetchScheduledMessages = async (id) => {
+    if (!id) return;
+    try {
+      const API_BASE = dynamicApiBase || '';
+      const res = await axios.get(`${API_BASE}/api/customers/${id}/scheduled-messages`);
+      setScheduledMessages(res.data);
+    } catch (e) {
+      console.error('Error fetching scheduled messages', e);
+    }
+  };
+
+  const handleScheduleMessage = async () => {
+    if (!scheduleText.trim() || !scheduleDate) return;
+    try {
+      const API_BASE = dynamicApiBase || '';
+      await axios.post(`${API_BASE}/api/customers/${selectedCustomerId}/scheduled-messages`, {
+        text: scheduleText,
+        scheduledAt: scheduleDate
+      });
+      setShowScheduleForm(false);
+      setScheduleText('');
+      setScheduleDate('');
+      fetchScheduledMessages(selectedCustomerId);
+    } catch (e) {
+      console.error('Error scheduling message', e);
+      alert('Error al programar el mensaje');
+    }
+  };
+
+  const handleCancelScheduledMessage = async (msgId) => {
+    try {
+      const API_BASE = dynamicApiBase || '';
+      await axios.delete(`${API_BASE}/api/scheduled-messages/${msgId}`);
+      fetchScheduledMessages(selectedCustomerId);
+    } catch (e) {
+      console.error('Error cancelling message', e);
+    }
+  };
+
 
   const fetchMessages = async (customerId) => {
     setIsLoadingMessages(true);
@@ -2067,6 +2121,69 @@ function App() {
                     {selectedCustomer.profileTag || 'Sin Triaje'}
                   </div>
                 </div>
+
+                
+                {/* Mensajes Programados */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold text-waTextMuted uppercase tracking-wider">Mensajes Programados</h4>
+                    <button 
+                      onClick={() => setShowScheduleForm(!showScheduleForm)}
+                      className="text-emerald-400 hover:text-emerald-300 transition text-xs font-bold"
+                      title="Programar nuevo mensaje"
+                    >
+                      {showScheduleForm ? 'Cerrar' : '+ Nuevo'}
+                    </button>
+                  </div>
+                  
+                  {showScheduleForm && (
+                    <div className="bg-waDark border border-waBorder rounded-xl p-3 space-y-3 shadow-inner">
+                      <textarea
+                        className="w-full bg-waBg border border-waBorder rounded-lg px-3 py-2 text-sm text-waText placeholder-waTextMuted focus:outline-none focus:border-emerald-500 resize-none"
+                        rows="2"
+                        placeholder="Escribe el mensaje a programar..."
+                        value={scheduleText}
+                        onChange={(e) => setScheduleText(e.target.value)}
+                      />
+                      <input 
+                        type="datetime-local" 
+                        className="w-full bg-waBg border border-waBorder rounded-lg px-3 py-2 text-sm text-waText focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                      />
+                      <button 
+                        onClick={handleScheduleMessage}
+                        disabled={!scheduleText.trim() || !scheduleDate}
+                        className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition"
+                      >
+                        Guardar Programación
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    {scheduledMessages.filter(m => m.status === 'PENDING').length === 0 ? (
+                      <span className="text-[10px] text-waTextMuted italic">No hay mensajes programados pendientes.</span>
+                    ) : (
+                      scheduledMessages.filter(m => m.status === 'PENDING').map(msg => (
+                        <div key={msg.id} className="bg-waDark border border-waBorder rounded-lg p-2 flex flex-col gap-1 relative group">
+                          <p className="text-xs text-waText line-clamp-2">{msg.text}</p>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[9px] text-emerald-400 font-medium">🕒 {new Date(msg.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                            <button 
+                              onClick={() => handleCancelScheduledMessage(msg.id)}
+                              className="text-[10px] text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition"
+                              title="Cancelar envío"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
 
                 {/* Etiquetas */}
                 <div className="space-y-2 border-b border-waBorder pb-4">

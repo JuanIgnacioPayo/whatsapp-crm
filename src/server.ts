@@ -25,12 +25,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 import { initBaileysEngine } from './services/qr.service';
+import { startScheduler } from './services/scheduler.service';
 
 // Socket.io initialization
 initSocketServer(server);
 
 // Baileys WhatsApp Engine initialization
 initBaileysEngine();
+
+// Start Scheduled Messages cron
+startScheduler();
 
 // Routes
 app.use('/', routes);

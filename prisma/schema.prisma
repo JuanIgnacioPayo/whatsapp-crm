@@ -32,6 +32,7 @@ model Customer {
   assignedOperatorId String?
   assignedOperator   User?           @relation(fields: [assignedOperatorId], references: [id])
   messages           Message[]
+  scheduledMessages  ScheduledMessage[]
   tags               TagOnCustomer[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
@@ -48,6 +49,16 @@ model Message {
   metaMessageId String?
   channel       String   @default("WHATSAPP") // WHATSAPP, MESSENGER, INSTAGRAM
   createdAt     DateTime @default(now())
+}
+
+model ScheduledMessage {
+  id          String   @id @default(uuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  text        String
+  scheduledAt DateTime
+  status      String   @default("PENDING") // PENDING, SENT, FAILED, CANCELLED
+  createdAt   DateTime @default(now())
 }
 
 model Tag {

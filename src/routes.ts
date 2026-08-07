@@ -16,6 +16,12 @@ import {
   deleteAllCustomers
 } from './controllers/crm.controller';
 
+import {
+  getScheduledMessages,
+  createScheduledMessage,
+  deleteScheduledMessage
+} from './controllers/scheduled-messages.controller';
+
 const router = Router();
 
 // Meta WhatsApp Cloud API Webhook Endpoints
@@ -29,6 +35,11 @@ router.get('/api/customers/:id/messages', getCustomerMessages);
 router.post('/api/customers/:id/messages', sendOperatorMessage);
 router.patch('/api/customers/:id/state', updateCustomerState);
 router.post('/api/customers/:id/tags', toggleCustomerTag);
+
+// Scheduled Messages
+router.get('/api/customers/:id/scheduled-messages', getScheduledMessages);
+router.post('/api/customers/:id/scheduled-messages', createScheduledMessage);
+router.delete('/api/scheduled-messages/:msgId', deleteScheduledMessage);
 
 // Tags CRUD
 router.get('/api/tags', getAllTags);
