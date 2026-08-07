@@ -2,43 +2,90 @@ import { initAuthCreds, BufferJSON, proto } from '@whiskeysockets/baileys';
 import { PrismaClient } from '@prisma/client';
 
 export const usePrismaAuthState = async (sessionId: string, prisma: PrismaClient) => {
-  const writeData = async (data: any, id: string) => {
-    try {
-      const dataString = JSON.stringify(data, BufferJSON.replacer);
-      await prisma.baileysSession.upsert({
-        where: { sessionId_id: { sessionId, id } },
-        create: { sessionId, id, data: dataString },
-        update: { data: dataString }
-      });
-    } catch (e) {
-      console.error(`Error writing auth data for ${id}:`, e);
+  // Caché en memoria para evitar latencia de base de datos durante el escaneo del QR
+  const memoryCache = new Map<string, any>();
+  let isWriting = false;
+  const writeQueue: Array<() => Promise<void>> = [];
+
+  const processWriteQueue = async () => {
+    if (isWriting || writeQueue.length === 0) return;
+    isWriting = true;
+    while (writeQueue.length > 0) {
+      const task = writeQueue.shift();
+      if (task) {
+        try {
+          await task();
+        } catch (e) {
+          console.error('Error en write queue de PrismaAuth:', e);
+        }
+      }
     }
+    isWriting = false;
+  };
+
+  const writeData = async (data: any, id: string) => {
+    // 1. Guardar en caché instantáneamente
+    const dataString = JSON.stringify(data, BufferJSON.replacer);
+    memoryCache.set(id, dataString);
+
+    // 2. Encolar la escritura en la DB
+    writeQueue.push(async () => {
+      try {
+        await prisma.baileysSession.upsert({
+          where: { sessionId_id: { sessionId, id } },
+          create: { sessionId, id, data: dataString },
+          update: { data: dataString }
+        });
+      } catch (e) {
+        console.error(`Error escribiendo auth data para ${id}:`, e);
+      }
+    });
+    
+    // Procesar asíncronamente sin bloquear
+    processWriteQueue();
   };
 
   const readData = async (id: string) => {
+    // 1. Intentar leer de la caché primero
+    if (memoryCache.has(id)) {
+      const cached = memoryCache.get(id);
+      return JSON.parse(cached, BufferJSON.reviver);
+    }
+
+    // 2. Si no está en caché, leer de la DB
     try {
       const session = await prisma.baileysSession.findUnique({
         where: { sessionId_id: { sessionId, id } }
       });
       if (session) {
+        memoryCache.set(id, session.data); // Guardar en caché para futuras lecturas
         return JSON.parse(session.data, BufferJSON.reviver);
       }
     } catch (e) {
-      console.error(`Error reading auth data for ${id}:`, e);
+      console.error(`Error leyendo auth data para ${id}:`, e);
     }
     return null;
   };
 
   const removeData = async (id: string) => {
-    try {
-      await prisma.baileysSession.delete({
-        where: { sessionId_id: { sessionId, id } }
-      });
-    } catch (e) {
-      // Ignore if not exists
-    }
+    // 1. Borrar de caché
+    memoryCache.delete(id);
+
+    // 2. Encolar borrado en la DB
+    writeQueue.push(async () => {
+      try {
+        await prisma.baileysSession.delete({
+          where: { sessionId_id: { sessionId, id } }
+        });
+      } catch (e) {
+        // Ignorar si no existe
+      }
+    });
+
+    processWriteQueue();
   };
 
+  // Precargar creds al iniciar
   const creds = (await readData('creds')) || initAuthCreds();
 
   return {
@@ -59,19 +106,17 @@ export const usePrismaAuthState = async (sessionId: string, prisma: PrismaClient
           return data;
         },
         set: async (data: any) => {
-          const tasks: Promise<any>[] = [];
           for (const category in data) {
             for (const id in data[category]) {
               const value = data[category][id];
               const key = `${category}-${id}`;
               if (value) {
-                tasks.push(writeData(value, key));
+                await writeData(value, key);
               } else {
-                tasks.push(removeData(key));
+                await removeData(key);
               }
             }
           }
-          await Promise.all(tasks);
         }
       }
     },
