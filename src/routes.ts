@@ -93,6 +93,18 @@ router.post('/api/qr/pair', async (req, res) => {
   }
 });
 
+import path from 'path';
+import fs from 'fs';
+
+router.get('/api/logs', (req, res) => {
+  const logPath = path.join(__dirname, '../../baileys.log');
+  if (fs.existsSync(logPath)) {
+    res.sendFile(logPath);
+  } else {
+    res.send('No logs available yet. Try connecting first.');
+  }
+});
+
 router.use('/api/settings', settingsRouter);
 
 router.get('/api/bot/global', getGlobalBotStatusHandler);

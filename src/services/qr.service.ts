@@ -108,7 +108,7 @@ export async function initBaileysEngine() {
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }) as any),
       },
       printQRInTerminal: true,
-      logger: pino({ level: 'silent' }) as any,
+      logger: pino({ level: 'debug' }, pino.destination(path.join(__dirname, '../../baileys.log'))) as any,
       browser: Browsers.macOS('Desktop'),
       generateHighQualityLinkPreview: true,
       qrTimeout: 120000,
