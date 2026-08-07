@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { sendMessageToCustomer } from './message.service';
-import { getSocketServer } from './socket.service';
+import { getIO } from './socket.service';
 
 const prisma = new PrismaClient();
 let schedulerInterval: NodeJS.Timeout | null = null;
@@ -49,7 +49,7 @@ export const startScheduler = () => {
           });
 
           // Notificar al frontend
-          const io = getSocketServer();
+          const io = getIO();
           if (io) {
             io.emit('newMessage', {
               ...savedMessage,

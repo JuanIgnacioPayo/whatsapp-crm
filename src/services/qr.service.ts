@@ -422,3 +422,14 @@ export async function disconnectWhatsApp() {
   setTimeout(() => initBaileysEngine(), 3000);
   return { success: true };
 }
+
+export async function getPairingCode(phoneNumber: string): Promise<string> {
+  if (!sock) throw new Error('Motor de WhatsApp no inicializado.');
+  const sanitized = phoneNumber.replace(/[^0-9]/g, '');
+  if (sock.authState?.creds?.me?.id) {
+    throw new Error('Ya hay una sesión de WhatsApp conectada.');
+  }
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  const code = await sock.requestPairingCode(sanitized);
+  return code;
+}
