@@ -1364,45 +1364,6 @@ function App() {
                       <p className="text-sm text-waTextMuted mb-2">Escanea el código QR desde la aplicación de WhatsApp en tu celular.</p>
                       <p className="text-xs font-mono text-emerald-500 mb-4">Expira en {qrSecondsLeft}s</p>
 
-                      <div className="w-full bg-black/40 p-3 rounded-lg border border-gray-700 mt-4">
-                        <h4 className="text-xs font-bold text-gray-300 mb-1 text-center">¿El QR te da error "Intenta más tarde"?</h4>
-                        <p className="text-[10px] text-gray-400 text-center mb-3">Vincula usando un código de 8 dígitos desde WhatsApp &gt; Dispositivos Vinculados &gt; Vincular con número.</p>
-                        
-                        {!pairingCode ? (
-                          <div className="flex flex-col gap-2">
-                            <input 
-                              type="text" 
-                              placeholder="Nro con cód. país (ej: 54911...)" 
-                              className="w-full bg-waDark border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                              value={phoneNumberForPairing}
-                              onChange={(e) => setPhoneNumberForPairing(e.target.value)}
-                            />
-                            <button 
-                              onClick={handleRequestPairingCode}
-                              disabled={isPairingLoading}
-                              className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded transition"
-                            >
-                              {isPairingLoading ? 'Solicitando...' : 'Obtener Código'}
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2 py-2">
-                            <span className="text-[10px] text-emerald-500 uppercase font-bold tracking-widest">Tu Código es:</span>
-                            <div className="bg-black/50 border border-emerald-500/30 px-4 py-2 rounded text-xl font-mono text-emerald-400 font-bold tracking-[0.2em] shadow-inner">
-                              {pairingCode}
-                            </div>
-                            <button 
-                              onClick={() => {
-                                setPairingCode('');
-                                setPhoneNumberForPairing('');
-                              }}
-                              className="text-[10px] text-gray-500 hover:text-gray-300 mt-1"
-                            >
-                              Generar otro código
-                            </button>
-                          </div>
-                        )}
-                      </div>
                     </div>
                   </div>
                 ) : (
