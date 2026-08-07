@@ -2,7 +2,8 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   WASocket,
-  Browsers
+  Browsers,
+  makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { PrismaClient } from '@prisma/client';
@@ -102,14 +103,18 @@ export async function initBaileysEngine() {
 
     sock = makeWASocket({
       version,
-      auth: state,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }) as any),
+      },
       printQRInTerminal: true,
       logger: pino({ level: 'silent' }) as any,
       browser: Browsers.macOS('Desktop'),
       generateHighQualityLinkPreview: true,
-      qrTimeout: 60000,
-      connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 60000
+      qrTimeout: 120000,
+      connectTimeoutMs: 120000,
+      defaultQueryTimeoutMs: 120000,
+      keepAliveIntervalMs: 30000
     });
 
     sock.ev.on('creds.update', saveCreds);
