@@ -1366,7 +1366,7 @@ function App() {
 
                       <div className="w-full bg-black/40 p-3 rounded-lg border border-gray-700 mt-4">
                         <h4 className="text-xs font-bold text-gray-300 mb-1 text-center">¿El QR te da error "Intenta más tarde"?</h4>
-                        <p className="text-[10px] text-gray-400 text-center mb-3">Vincula usando un código de 8 dígitos desde WhatsApp > Dispositivos Vinculados > Vincular con número.</p>
+                        <p className="text-[10px] text-gray-400 text-center mb-3">Vincula usando un código de 8 dígitos desde WhatsApp &gt; Dispositivos Vinculados &gt; Vincular con número.</p>
                         
                         {!pairingCode ? (
                           <div className="flex flex-col gap-2">
