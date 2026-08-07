@@ -105,7 +105,7 @@ export async function initBaileysEngine() {
       auth: state,
       printQRInTerminal: true,
       logger: pino({ level: 'silent' }) as any,
-      browser: Browsers.ubuntu('Chrome'),
+      browser: Browsers.macOS('Desktop'),
       generateHighQualityLinkPreview: true,
       qrTimeout: 60000,
       connectTimeoutMs: 60000,
