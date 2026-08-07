@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
-import { sendWhatsAppMessage } from './whatsapp.service';
-import { emitNewMessage, emitCustomerUpdate } from './socket.service';
 import { processWithLLM } from './llm.service';
+import { sendMessageToCustomer } from './message.service';
+import { emitNewMessage, emitCustomerUpdate } from './socket.service';
 const prisma = new PrismaClient();
 let isGlobalBotEnabled = false;
 
@@ -22,7 +22,7 @@ export function setGlobalBotStatus(enabled?: boolean): boolean {
   return isGlobalBotEnabled;
 }
 
-export async function handleIncomingMessage(phone: string, incomingText: string, name?: string, metaMessageId?: string) {
+export async function handleIncomingMessage(externalId: string, incomingText: string, channel: string = 'WHATSAPP', name?: string, metaMessageId?: string) {
   // 1. Evitar duplicados si el mensaje ya existe
   if (metaMessageId) {
     if (processingMessages.has(metaMessageId)) {
@@ -41,15 +41,16 @@ export async function handleIncomingMessage(phone: string, incomingText: string,
 
   // 2. Buscar o crear el cliente en la BD
   let customer = await prisma.customer.findUnique({
-    where: { phone },
+    where: { externalId },
     include: { tags: { include: { tag: true } } }
   });
 
   if (!customer) {
     customer = await prisma.customer.create({
       data: {
-        phone,
-        name: name || `Cliente ${phone.slice(-4)}`,
+        externalId,
+        channel,
+        name: name || `Cliente ${externalId.slice(-4)}`,
         conversationState: isGlobalBotEnabled ? 'BOT_ACTIVE' : 'PENDING',
         botStep: 'STEP_1_WELCOME'
       },
@@ -64,7 +65,8 @@ export async function handleIncomingMessage(phone: string, incomingText: string,
       senderType: 'CUSTOMER',
       text: incomingText,
       status: 'READ',
-      metaMessageId: metaMessageId || undefined
+      metaMessageId: metaMessageId || undefined,
+      channel: channel
     }
   });
 
@@ -124,8 +126,8 @@ async function processBotStateMachine(customer: any, text: string) {
       update: {}
     });
 
-    // Enviar mensaje de cierre por WhatsApp
-    await sendWhatsAppMessage(customer.phone, response.text);
+    // Enviar mensaje de cierre por el canal correcto
+    await sendMessageToCustomer(customer, response.text);
 
     // Guardar mensaje del bot
     const botMsg = await prisma.message.create({
@@ -133,7 +135,8 @@ async function processBotStateMachine(customer: any, text: string) {
         customerId: customer.id,
         senderType: 'BOT',
         text: response.text,
-        status: 'SENT'
+        status: 'SENT',
+        channel: customer.channel
       }
     });
     emitNewMessage(botMsg);
@@ -153,7 +156,7 @@ async function processBotStateMachine(customer: any, text: string) {
     emitCustomerUpdate(finalCustomer);
   } else {
     // Si no es un tool call, es una respuesta de texto normal
-    await sendWhatsAppMessage(customer.phone, response.text);
+    await sendMessageToCustomer(customer, response.text);
 
     // Guardar respuesta del bot en BD
     const botMsg = await prisma.message.create({
@@ -161,7 +164,8 @@ async function processBotStateMachine(customer: any, text: string) {
         customerId: customer.id,
         senderType: 'BOT',
         text: response.text,
-        status: 'SENT'
+        status: 'SENT',
+        channel: customer.channel
       }
     });
     emitNewMessage(botMsg);

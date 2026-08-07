@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getCustomers = getCustomers;
+exports.deleteAllCustomers = deleteAllCustomers;
 exports.getCustomerMessages = getCustomerMessages;
 exports.sendOperatorMessage = sendOperatorMessage;
 exports.updateCustomerState = updateCustomerState;
@@ -11,8 +12,12 @@ exports.resetBotState = resetBotState;
 exports.getGlobalBotStatusHandler = getGlobalBotStatusHandler;
 exports.toggleGlobalBotHandler = toggleGlobalBotHandler;
 exports.toggleCustomerBotHandler = toggleCustomerBotHandler;
+exports.getAllTags = getAllTags;
+exports.createTag = createTag;
+exports.updateTag = updateTag;
+exports.deleteTag = deleteTag;
 const client_1 = require("@prisma/client");
-const whatsapp_service_1 = require("../services/whatsapp.service");
+const message_service_1 = require("../services/message.service");
 const socket_service_1 = require("../services/socket.service");
 const prisma = new client_1.PrismaClient();
 // 1. Obtener lista de conversaciones filtradas por estado y etiqueta
@@ -77,6 +82,18 @@ async function getCustomers(req, res) {
         return res.status(500).json({ error: error.message });
     }
 }
+// 1.5. Eliminar TODOS los clientes y mensajes (wipe db)
+async function deleteAllCustomers(req, res) {
+    try {
+        // Delete all customers (Prisma's onDelete: Cascade should delete messages/tags)
+        await prisma.customer.deleteMany({});
+        res.json({ success: true, message: 'Todos los chats fueron eliminados.' });
+    }
+    catch (error) {
+        console.error('Error wiping customers:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
 // 2. Obtener historial de mensajes de un cliente
 async function getCustomerMessages(req, res) {
     try {
@@ -103,8 +120,8 @@ async function sendOperatorMessage(req, res) {
         if (!customer) {
             return res.status(404).json({ error: 'Cliente no encontrado.' });
         }
-        // Enviar a WhatsApp Cloud API
-        const whatsappResult = await (0, whatsapp_service_1.sendWhatsAppMessage)(customer.phone, text);
+        // Enviar por el canal correspondiente (WHATSAPP, MESSENGER, INSTAGRAM)
+        const sendResult = await (0, message_service_1.sendMessageToCustomer)(customer, text);
         // Guardar en la BD como mensaje de OPERATOR
         const message = await prisma.message.create({
             data: {
@@ -112,8 +129,9 @@ async function sendOperatorMessage(req, res) {
                 senderType: 'OPERATOR',
                 operatorName: operatorName || 'Operador',
                 text,
-                status: whatsappResult.success ? 'SENT' : 'FAILED',
-                metaMessageId: whatsappResult.messageId
+                status: sendResult.success ? 'SENT' : 'FAILED',
+                metaMessageId: sendResult.messageId,
+                channel: customer.channel
             }
         });
         // Actualizar estado del chat a IN_ATTENTION si estaba en PENDING o BOT_ACTIVE
@@ -282,6 +300,57 @@ async function toggleCustomerBotHandler(req, res) {
         const { id } = req.params;
         const updatedCustomer = await (0, bot_service_1.toggleCustomerBotState)(id);
         return res.json(updatedCustomer);
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+// 10. CRUD de Etiquetas Dinámicas (Tags)
+async function getAllTags(req, res) {
+    try {
+        const tags = await prisma.tag.findMany({ orderBy: { name: 'asc' } });
+        return res.json(tags);
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+async function createTag(req, res) {
+    try {
+        const { name, color } = req.body;
+        if (!name)
+            return res.status(400).json({ error: 'El nombre es obligatorio' });
+        const tag = await prisma.tag.create({ data: { name, color: color || '#3B82F6' } });
+        return res.json(tag);
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+async function updateTag(req, res) {
+    try {
+        const { id } = req.params;
+        const { name, color } = req.body;
+        const tag = await prisma.tag.update({
+            where: { id },
+            data: { name, color }
+        });
+        // Al actualizar el tag, notificar a los clientes conectados para que refresquen
+        const io = (0, socket_service_2.getIO)();
+        io.emit('tags_updated', tag);
+        return res.json(tag);
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+async function deleteTag(req, res) {
+    try {
+        const { id } = req.params;
+        await prisma.tag.delete({ where: { id } });
+        const io = (0, socket_service_2.getIO)();
+        io.emit('tags_updated', { id, deleted: true });
+        return res.json({ success: true });
     }
     catch (error) {
         return res.status(500).json({ error: error.message });

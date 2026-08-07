@@ -1,10 +1,12 @@
 import makeWASocket, {
-  useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
   WASocket,
   Browsers
 } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
+import { PrismaClient } from '@prisma/client';
+import { usePrismaAuthState } from './prisma-auth.service';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import path from 'path';
@@ -54,7 +56,8 @@ export async function initBaileysEngine() {
       fs.mkdirSync(AUTH_DIR, { recursive: true });
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+    const prisma = new PrismaClient();
+    const { state, saveCreds } = await usePrismaAuthState('default', prisma);
     const { version } = await fetchLatestBaileysVersion();
 
     console.log(`⚡ Iniciando motor WhatsApp (Baileys v${version.join('.')})...`);
@@ -123,6 +126,15 @@ export async function initBaileysEngine() {
           setTimeout(() => initBaileysEngine(), 3000);
         } else {
           console.warn('🔒 Sesión cerrada por el usuario. Limpiando credenciales...');
+          try {
+            const prisma = new (require('@prisma/client').PrismaClient)();
+            await prisma.baileysSession.deleteMany({
+              where: { sessionId: 'default' }
+            });
+            await prisma.$disconnect();
+          } catch (e) {
+            console.error('Error al borrar sesión de DB:', e);
+          }
           if (fs.existsSync(AUTH_DIR)) {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
           }
@@ -142,7 +154,7 @@ export async function initBaileysEngine() {
           const phone = contact.id.replace('@s.whatsapp.net', '').replace('@c.us', '').split(':')[0];
           try {
             await prisma.customer.updateMany({
-              where: { phone: phone },
+              where: { externalId: phone },
               data: { name: contact.name }
             });
           } catch (e) {}
@@ -177,11 +189,12 @@ export async function initBaileysEngine() {
           }
 
           const prisma = new (require('@prisma/client').PrismaClient)();
-          let customer = await prisma.customer.findUnique({ where: { phone: fromPhone } });
+          let customer = await prisma.customer.findUnique({ where: { externalId: fromPhone } });
           if (!customer) {
             customer = await prisma.customer.create({
               data: {
-                phone: fromPhone,
+                externalId: fromPhone,
+                channel: 'WHATSAPP',
                 name: profileName || `Cliente ${fromPhone.slice(-4)}`,
                 conversationState: 'PENDING'
               }
@@ -217,7 +230,7 @@ export async function initBaileysEngine() {
           const phone = contact.id.replace('@s.whatsapp.net', '').replace('@c.us', '').split(':')[0];
           try {
             await prisma.customer.updateMany({
-              where: { phone: phone },
+              where: { externalId: phone },
               data: { name: contact.name }
             });
           } catch (e) {}
@@ -258,19 +271,20 @@ export async function initBaileysEngine() {
 
         try {
           const prisma = new (require('@prisma/client').PrismaClient)();
-          let customer = await prisma.customer.findUnique({ where: { phone: fromPhone } });
+          let customer = await prisma.customer.findUnique({ where: { externalId: fromPhone } });
           // Obtener foto y estado si el cliente existe y no los tiene (lazy fetch para no bloquear)
           if (customer && (!customer.profilePictureUrl || !customer.about)) {
             try {
+              if (!sock) return;
               const ppUrl = await sock.profilePictureUrl(fromJid, 'preview').catch((err) => {
                 console.error(`Error fetching profile pic for ${fromJid}:`, err?.message);
                 return null;
               });
-              const statusData = await sock.fetchStatus(fromJid).catch(() => null);
+              const statusData = await sock.fetchStatus(fromJid).catch(() => null) as any;
               
               if (ppUrl || statusData?.status) {
                 await prisma.customer.update({
-                  where: { phone: fromPhone },
+                  where: { externalId: fromPhone },
                   data: {
                     profilePictureUrl: ppUrl || customer.profilePictureUrl,
                     about: statusData?.status || customer.about
@@ -286,7 +300,7 @@ export async function initBaileysEngine() {
         }
 
         try {
-          await handleIncomingMessage(fromPhone, incomingText, profileName, msg.key?.id);
+          await handleIncomingMessage(fromPhone, incomingText, 'WHATSAPP', profileName, msg.key?.id || undefined);
         } catch (err) {
           console.error('Error procesando mensaje entrante en Baileys:', err);
         }

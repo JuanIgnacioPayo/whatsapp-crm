@@ -33,7 +33,7 @@ export async function receiveWebhookMessage(req: Request, res: Response) {
     const body = req.body;
     console.log('🔔 [WEBHOOK POST RECIBIDO EN SERVIDOR]', JSON.stringify(body, null, 2));
 
-    // Verificar que sea un evento de WhatsApp Cloud API
+    // 1. WhatsApp Cloud API
     if (body.object === 'whatsapp_business_account') {
       const entry = body.entry?.[0];
       const changes = entry?.changes?.[0];
@@ -41,8 +41,9 @@ export async function receiveWebhookMessage(req: Request, res: Response) {
 
       if (value && value.messages && value.messages[0]) {
         const message = value.messages[0];
-        const fromPhone = message.from; // Número de WhatsApp del cliente
+        const fromPhone = message.from; 
         const profileName = value.contacts?.[0]?.profile?.name || undefined;
+        const msgId = message.id;
 
         let incomingText = 'Mensaje de WhatsApp';
         if (message.type === 'text' && message.text) {
@@ -53,13 +54,30 @@ export async function receiveWebhookMessage(req: Request, res: Response) {
           incomingText = message.button?.text || 'Botón presionado';
         }
 
-        console.log(`📩 Mensaje entrante de ${fromPhone} (${profileName || 'Anónimo'}): ${incomingText}`);
-
-        // Procesar el mensaje a través del motor del bot / CRM        const msgId = msg.id;
-        await handleIncomingMessage(fromPhone, incomingText, profileName, msgId);
+        console.log(`📩 [WhatsApp Cloud API] Mensaje de ${fromPhone}: ${incomingText}`);
+        await handleIncomingMessage(fromPhone, incomingText, 'WHATSAPP', profileName, msgId);
       }
+      return res.status(200).send('EVENT_RECEIVED');
+    }
 
-      // Meta exige responder 200 OK inmediatamente a todos los webhooks
+    // 2. Facebook Messenger / Instagram Direct
+    if (body.object === 'page' || body.object === 'instagram') {
+      const entries = body.entry || [];
+      for (const entry of entries) {
+        const messagingEvents = entry.messaging || [];
+        for (const event of messagingEvents) {
+          if (event.message && !event.message.is_echo) {
+            const senderId = event.sender.id;
+            const text = event.message.text || 'Archivo/Media adjunto';
+            const msgId = event.message.mid;
+            
+            const channel = body.object === 'instagram' ? 'INSTAGRAM' : 'MESSENGER';
+            console.log(`📩 [${channel}] Mensaje de ${senderId}: ${text}`);
+
+            await handleIncomingMessage(senderId, text, channel, undefined, msgId);
+          }
+        }
+      }
       return res.status(200).send('EVENT_RECEIVED');
     }
 

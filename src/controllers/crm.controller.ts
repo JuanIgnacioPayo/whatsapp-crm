@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { sendWhatsAppMessage } from '../services/whatsapp.service';
+import { sendMessageToCustomer } from '../services/message.service';
 import { emitNewMessage, emitCustomerUpdate, emitOperatorResponse } from '../services/socket.service';
 
 const prisma = new PrismaClient();
@@ -112,8 +112,8 @@ export async function sendOperatorMessage(req: Request, res: Response) {
       return res.status(404).json({ error: 'Cliente no encontrado.' });
     }
 
-    // Enviar a WhatsApp Cloud API
-    const whatsappResult = await sendWhatsAppMessage(customer.phone, text);
+    // Enviar por el canal correspondiente (WHATSAPP, MESSENGER, INSTAGRAM)
+    const sendResult = await sendMessageToCustomer(customer, text);
 
     // Guardar en la BD como mensaje de OPERATOR
     const message = await prisma.message.create({
@@ -122,8 +122,9 @@ export async function sendOperatorMessage(req: Request, res: Response) {
         senderType: 'OPERATOR',
         operatorName: operatorName || 'Operador',
         text,
-        status: whatsappResult.success ? 'SENT' : 'FAILED',
-        metaMessageId: whatsappResult.messageId
+        status: sendResult.success ? 'SENT' : 'FAILED',
+        metaMessageId: sendResult.messageId,
+        channel: customer.channel
       }
     });
 

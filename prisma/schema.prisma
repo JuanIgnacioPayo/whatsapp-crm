@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -20,7 +20,9 @@ model User {
 
 model Customer {
   id                 String          @id @default(uuid())
-  phone              String          @unique
+  externalId         String          @unique // WhatsApp number, Messenger PSID, Instagram IGSID
+  channel            String          @default("WHATSAPP") // WHATSAPP, MESSENGER, INSTAGRAM
+  channelData        String?         // JSON extra data specific to the channel
   name               String?
   profilePictureUrl  String?
   about              String?
@@ -44,6 +46,7 @@ model Message {
   text          String
   status        String   @default("SENT") // SENT, DELIVERED, READ, FAILED
   metaMessageId String?
+  channel       String   @default("WHATSAPP") // WHATSAPP, MESSENGER, INSTAGRAM
   createdAt     DateTime @default(now())
 }
 
@@ -85,4 +88,12 @@ model SystemSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model BaileysSession {
+  sessionId String
+  id        String
+  data      String
+
+  @@id([sessionId, id])
 }

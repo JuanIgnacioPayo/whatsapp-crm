@@ -346,6 +346,13 @@ function QuickRepliesConfigModal({ onClose, dynamicApiBase, quickReplies, fetchQ
   );
 }
 
+
+function getChannelIcon(channel) {
+  if (channel === 'MESSENGER') return '🔵 ';
+  if (channel === 'INSTAGRAM') return '🟣 ';
+  return '🟢 ';
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
@@ -408,7 +415,7 @@ function App() {
   // Estados para Código QR y WhatsApp Session
   const [qrCodeData, setQrCodeData] = useState(null);
   const [isQrConnected, setIsQrConnected] = useState(false);
-  const [connectedPhone, setConnectedPhone] = useState(null);
+  const [connectedExternalId, setConnectedExternalId] = useState(null);
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(60);
   const [isGlobalBotEnabled, setIsGlobalBotEnabled] = useState(false);
@@ -648,7 +655,7 @@ function App() {
       if (data.connected) {
         setQrCodeData(null);
         setShowQrModal(false);
-        if (data.phone) setConnectedPhone(data.phone);
+        if (data.externalId) setConnectedExternalId(data.externalId);
         // Cargar chats al conectar WhatsApp
         if (user) {
           setIsLoadingChats(true);
@@ -765,7 +772,7 @@ function App() {
       if (data.connected && !isQrConnected) {
         setQrCodeData(null);
         setShowQrModal(false);
-        if (data.phone) setConnectedPhone(data.phone);
+        if (data.externalId) setConnectedExternalId(data.externalId);
         if (user) {
           setIsLoadingChats(true);
           fetchCustomers().finally(() => setIsLoadingChats(false));
@@ -785,7 +792,7 @@ function App() {
         setQrCodeData(data.qr);
         setQrSecondsLeft(data.ttl || 60);
       }
-      if (data.phone) setConnectedPhone(data.phone);
+      if (data.externalId) setConnectedExternalId(data.externalId);
     } catch (e) {
       console.error(e);
     }
@@ -1105,7 +1112,7 @@ function App() {
     setCurrentView('crm');
     setQrCodeData(null);
     setIsQrConnected(false);
-    setConnectedPhone(null);
+    setConnectedExternalId(null);
     setShowQrModal(false);
     setAllUsers([]);
     setShowSettingsMenu(false);
@@ -1149,7 +1156,7 @@ function App() {
       setSelectedCustomerId(null);
       setQrCodeData(null);
       setIsQrConnected(false);
-      setConnectedPhone(null);
+      setConnectedExternalId(null);
       setShowSettingsMenu(false);
       setShowQrModal(true);
     } catch (e) {
@@ -1173,12 +1180,12 @@ function App() {
 
   // Filtrado de conversaciones y ordenamiento por fecha de último mensaje
   const filteredCustomers = customers.filter((c) => {
-    if (systemSettings.ignore_status === 'true' && (c.phone.includes('@newsletter') || c.phone.includes('status@broadcast') || c.phone.includes('@broadcast'))) return false;
-    if (systemSettings.ignore_groups === 'true' && c.phone.includes('@g.us')) return false;
+    if (systemSettings.ignore_status === 'true' && (c.externalId.includes('@newsletter') || c.externalId.includes('status@broadcast') || c.externalId.includes('@broadcast'))) return false;
+    if (systemSettings.ignore_groups === 'true' && c.externalId.includes('@g.us')) return false;
 
     const matchesSearch =
       (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.phone.includes(searchQuery) ||
+      c.externalId.includes(searchQuery) ||
       (c.messages[0]?.text || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesState = stateFilter === 'ALL' || c.conversationState === stateFilter;
     const matchesTag = tagFilter === 'ALL' || c.profileTag === tagFilter || c.tags?.some((t) => t.tag.name === tagFilter);
@@ -1593,10 +1600,10 @@ function App() {
       ) : (
 
         /* ================= VISTA PRINCIPAL CRM ================= */
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden relative">
           
           {/* PANEL IZQUIERDO: SIDEBAR DE CHATS */}
-          <aside className="w-80 bg-waDark border-r border-waBorder flex flex-col shrink-0">
+          <aside className={`w-full md:w-80 bg-waDark border-r border-waBorder flex-col shrink-0 ${selectedCustomerId ? 'hidden md:flex' : 'flex'}`}>
             {/* CABECERA ESTILO WHATSAPP (Panel Izquierdo) */}
             <header className="h-16 bg-waHeader flex items-center justify-between px-4 shrink-0">
               <div className="flex items-center gap-3">
@@ -1787,7 +1794,10 @@ function App() {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-xs font-semibold truncate text-waText">{cust.name && cust.name !== cust.phone && !cust.name.startsWith('Cliente ') ? cust.name : `+${cust.phone}`}</h3>
+                          <h3 className="text-xs font-semibold truncate text-waText">
+    {getChannelIcon(cust.channel)}
+    {cust.name && cust.name !== cust.externalId && !cust.name.startsWith('Cliente ') ? cust.name : (cust.channel === 'WHATSAPP' ? `+${cust.externalId}` : cust.externalId)}
+  </h3>
                           <span className="text-[10px] text-waTextMuted">
                             {lastMsg ? new Date(lastMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                           </span>
@@ -1828,14 +1838,12 @@ function App() {
 
                           {/* Operadores Participantes / Quienes atienden la charla */}
                           {cust.participatingOperators && cust.participatingOperators.length > 0 ? (
-                            <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-600/70 text-emerald-300 font-bold flex items-center gap-1 shadow-sm" title={`Atendido por: ${cust.participatingOperators.join(', ')}`}>
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                              {cust.participatingOperators.join(', ').includes('WhatsApp Celular') ? '📱' : '💻'} {cust.participatingOperators.join(', ')}
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-600/70 text-emerald-300 font-bold flex items-center justify-center shadow-sm" title={`Atendido por: ${cust.participatingOperators.join(', ')}`}>
+                              {cust.participatingOperators.join(', ').includes('WhatsApp Celular') ? '📱' : '💻'}
                             </span>
                           ) : cust.assignedOperator ? (
-                            <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-600/70 text-emerald-300 font-bold flex items-center gap-1 shadow-sm">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                              💻 {cust.assignedOperator.name}
+                            <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-600/70 text-emerald-300 font-bold flex items-center justify-center shadow-sm" title={`Atendido por: ${cust.assignedOperator.name}`}>
+                              💻
                             </span>
                           ) : null}
                         </div>
@@ -1848,12 +1856,19 @@ function App() {
           </aside>
 
           {/* PANEL CENTRAL: VISTA DEL CHAT */}
-          <main className="flex-1 flex flex-col bg-waChatBg relative min-w-0">
+          <main className={`flex-1 flex-col bg-waChatBg relative min-w-0 ${!selectedCustomerId ? 'hidden md:flex' : 'flex'}`}>
             {selectedCustomer ? (
               <>
                 {/* Header del Chat */}
                 <div className="h-14 bg-waHeader border-b border-waBorder px-4 flex items-center justify-between shrink-0">
                   <div className="flex items-center space-x-3 min-w-0 flex-1 mr-4">
+                    <button 
+                      onClick={() => setSelectedCustomerId(null)} 
+                      className="md:hidden p-2 -ml-2 text-waTextMuted hover:text-waText transition rounded-full hover:bg-waDark"
+                    >
+                      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
+                    </button>
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
                     <div className="w-10 h-10 rounded-full bg-waBorder flex items-center justify-center font-bold text-waText overflow-hidden shrink-0">
                       {selectedCustomer.profilePictureUrl ? <img src={selectedCustomer.profilePictureUrl} className="w-full h-full object-cover" alt="Avatar" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} /> : null}
                         <div style={{ display: selectedCustomer.profilePictureUrl ? 'none' : 'flex' }} className="w-full h-full items-center justify-center bg-waHeader font-bold text-waText">
@@ -1862,18 +1877,22 @@ function App() {
                     </div>
                     <div className="min-w-0 flex flex-col justify-center">
                       <div className="flex items-center space-x-2 min-w-0">
-                        <h2 className="text-xs font-semibold text-waText truncate">{selectedCustomer.name && selectedCustomer.name !== selectedCustomer.phone && !selectedCustomer.name.startsWith('Cliente ') ? selectedCustomer.name : `+${selectedCustomer.phone}`}</h2>
+                        <h2 className="text-xs font-semibold text-waText truncate">
+    {getChannelIcon(selectedCustomer.channel)}
+    {selectedCustomer.name && selectedCustomer.name !== selectedCustomer.externalId && !selectedCustomer.name.startsWith('Cliente ') ? selectedCustomer.name : (selectedCustomer.channel === 'WHATSAPP' ? `+${selectedCustomer.externalId}` : selectedCustomer.externalId)}
+  </h2>
                         {selectedCustomer.participatingOperators && selectedCustomer.participatingOperators.length > 0 && (
                           <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700 text-emerald-300 font-semibold whitespace-nowrap shrink-0" title={`Atendido por: ${selectedCustomer.participatingOperators.join(', ')}`}>
                             👥 {selectedCustomer.participatingOperators.join(', ')}
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-waTextMuted truncate">{selectedCustomer.phone}</p>
+                      <p className="text-[11px] text-waTextMuted truncate">{selectedCustomer.externalId}</p>
                     </div>
                   </div>
+                </div>
 
-                  {/* Acciones del Chat */}
+                {/* Acciones del Chat */}
                   <div className="flex items-center space-x-2 shrink-0">
                     <button
                       onClick={async () => {
@@ -1956,7 +1975,7 @@ function App() {
                                 </span>
                               )}
                             </span>
-                            <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>{new Date(m.createdAt).toLocaleDateString([], { day: '2-digit', month: 'short' })} - {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
 
                           <p className="whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--waText)' }}>{m.text}</p>
@@ -2033,8 +2052,11 @@ function App() {
                           {selectedCustomer.name ? selectedCustomer.name.charAt(0).toUpperCase() : 'C'}
                         </div>
                   </div>
-                  <h3 className="text-lg font-semibold text-waText">{selectedCustomer.name && selectedCustomer.name !== selectedCustomer.phone && !selectedCustomer.name.startsWith('Cliente ') ? selectedCustomer.name : `+${selectedCustomer.phone}`}</h3>
-                  <p className="text-sm text-waTextMuted mt-1 mb-2">{selectedCustomer.phone}</p>
+                  <h3 className="text-lg font-semibold text-waText">
+    {getChannelIcon(selectedCustomer.channel)}
+    {selectedCustomer.name && selectedCustomer.name !== selectedCustomer.externalId && !selectedCustomer.name.startsWith('Cliente ') ? selectedCustomer.name : (selectedCustomer.channel === 'WHATSAPP' ? `+${selectedCustomer.externalId}` : selectedCustomer.externalId)}
+  </h3>
+                  <p className="text-sm text-waTextMuted mt-1 mb-2">{selectedCustomer.externalId}</p>
                   {selectedCustomer.about && (
                     <div className="mt-4 p-4 bg-waBorder rounded-lg text-left w-full shadow-sm">
                       <p className="text-[11px] text-waTextMuted mb-1 font-semibold uppercase tracking-wider">Info.</p>
@@ -2123,7 +2145,7 @@ function App() {
                 </div>
                 <h4 className="font-bold text-sm text-emerald-300">¡WhatsApp Conectado Exitosamente!</h4>
                 <p className="text-xs text-waText">
-                  Tu número {connectedPhone && <strong>+{connectedPhone}</strong>} ya está enlazado. Todos tus operadores pueden chatear libremente.
+                  Tu número {connectedExternalId && <strong>+{connectedExternalId}</strong>} ya está enlazado. Todos tus operadores pueden chatear libremente.
                 </p>
               </div>
             ) : qrCodeData ? (
