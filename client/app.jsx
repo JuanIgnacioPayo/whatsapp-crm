@@ -400,7 +400,7 @@ function App() {
   // Settings
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
 
-  const [systemSettings, setSystemSettings] = useState({ ignore_groups: 'true', ignore_status: 'true', theme: 'dark' });
+  const [systemSettings, setSystemSettings] = useState({ ignore_groups: 'true', ignore_status: 'true', theme: 'dark', show_whatsapp: 'true', show_instagram: 'true', show_facebook: 'true' });
 
   useEffect(() => {
     fetch('/api/settings').then(res => res.json()).then(data => {
@@ -1278,6 +1278,10 @@ function App() {
   const filteredCustomers = customers.filter((c) => {
     if (systemSettings.ignore_status === 'true' && (c.externalId.includes('@newsletter') || c.externalId.includes('status@broadcast') || c.externalId.includes('@broadcast'))) return false;
     if (systemSettings.ignore_groups === 'true' && c.externalId.includes('@g.us')) return false;
+    if (systemSettings.show_whatsapp === 'false' && c.channel === 'WHATSAPP') return false;
+    if (systemSettings.show_instagram === 'false' && c.channel === 'INSTAGRAM') return false;
+    if (systemSettings.show_facebook === 'false' && c.channel === 'MESSENGER') return false;
+
 
     const matchesSearch =
       (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1723,7 +1727,49 @@ function App() {
                 >
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"></path></svg>
                 </button>
+                                <button 
+                  onClick={() => {
+                    const newVal = systemSettings.show_whatsapp === 'false' ? 'true' : 'false';
+                    setSystemSettings(prev => ({...prev, show_whatsapp: newVal}));
+                    fetch(dynamicApiBase ? `${dynamicApiBase}/api/settings` : '/api/settings', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({...systemSettings, show_whatsapp: newVal})
+                    }).catch(console.error);
+                  }}
+                  title={systemSettings.show_whatsapp === 'false' ? 'Mostrar WhatsApp' : 'Ocultar WhatsApp'} 
+                  className={systemSettings.show_whatsapp === 'false' ? 'text-red-400 opacity-60 hover:opacity-100 transition' : 'text-emerald-500 hover:opacity-80 transition'}
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17.47 5.14C15.82 3.49 13.62 2.58 11.27 2.58c-4.75 0-8.62 3.87-8.62 8.62 0 1.52.4 3.01 1.15 4.32L2.51 21.4l6.02-1.58c1.27.7 2.72 1.07 4.21 1.07 4.75 0 8.62-3.87 8.62-8.62 0-2.35-.92-4.55-2.58-6.2zM11.27 19.11c-1.29 0-2.56-.35-3.67-.99l-.26-.16-2.73.72.73-2.66-.17-.28c-.71-1.14-1.08-2.46-1.08-3.82 0-3.95 3.22-7.17 7.18-7.17 1.91 0 3.7.74 5.06 2.09 1.35 1.35 2.09 3.14 2.09 5.05-.01 3.96-3.23 7.18-7.19 7.18z"></path></svg>
+                </button>
                 <button 
+                  onClick={() => {
+                    const newVal = systemSettings.show_instagram === 'false' ? 'true' : 'false';
+                    setSystemSettings(prev => ({...prev, show_instagram: newVal}));
+                    fetch(dynamicApiBase ? `${dynamicApiBase}/api/settings` : '/api/settings', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({...systemSettings, show_instagram: newVal})
+                    }).catch(console.error);
+                  }}
+                  title={systemSettings.show_instagram === 'false' ? 'Mostrar Instagram' : 'Ocultar Instagram'} 
+                  className={systemSettings.show_instagram === 'false' ? 'text-red-400 opacity-60 hover:opacity-100 transition' : 'text-purple-500 hover:opacity-80 transition'}
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2c2.717 0 3.056.01 4.122.06 1.065.05 1.79.217 2.428.465.66.254 1.216.598 1.772 1.153a4.908 4.908 0 0 1 1.153 1.772c.247.637.415 1.363.465 2.428.047 1.066.06 1.405.06 4.122 0 2.717-.01 3.056-.06 4.122-.05 1.065-.218 1.79-.465 2.428a4.883 4.883 0 0 1-1.153 1.772 4.915 4.915 0 0 1-1.772 1.153c-.637.247-1.363.415-2.428.465-1.066.047-1.405.06-4.122.06-2.717 0-3.056-.01-4.122-.06-1.065-.05-1.79-.218-2.428-.465a4.89 4.89 0 0 1-1.772-1.153 4.904 4.904 0 0 1-1.153-1.772c-.248-.637-.415-1.363-.465-2.428C2.013 15.056 2 14.717 2 12c0-2.717.01-3.056.06-4.122.05-1.066.217-1.79.465-2.428a4.88 4.88 0 0 1 1.153-1.772A4.897 4.897 0 0 1 5.45 2.525c.638-.248 1.362-.415 2.428-.465C8.944 2.013 9.283 2 12 2zm0 5c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 8c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3zm5.338-9.67a1.196 1.196 0 0 0-.84-.35h-.002c-.318 0-.623.126-.847.35a1.195 1.195 0 0 0-.352.846c0 .32.126.625.352.848.225.223.53.35.847.35.318 0 .623-.127.848-.35.224-.223.35-.528.35-.848 0-.318-.126-.624-.35-.847z"></path></svg>
+                </button>
+                <button 
+                  onClick={() => {
+                    const newVal = systemSettings.show_facebook === 'false' ? 'true' : 'false';
+                    setSystemSettings(prev => ({...prev, show_facebook: newVal}));
+                    fetch(dynamicApiBase ? `${dynamicApiBase}/api/settings` : '/api/settings', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({...systemSettings, show_facebook: newVal})
+                    }).catch(console.error);
+                  }}
+                  title={systemSettings.show_facebook === 'false' ? 'Mostrar Messenger' : 'Ocultar Messenger'} 
+                  className={systemSettings.show_facebook === 'false' ? 'text-red-400 opacity-60 hover:opacity-100 transition' : 'text-blue-500 hover:opacity-80 transition'}
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.9 1.442 5.485 3.702 7.159V22l3.39-1.874a10.605 10.605 0 0 0 2.908.406c5.522 0 10-4.144 10-9.258C22 6.145 17.523 2 12 2zm1.026 12.339-2.617-2.793-5.093 2.793 5.603-5.965 2.637 2.792 5.074-2.792-5.604 5.965z"></path></svg>
+                </button>
+<button 
                   onClick={() => {
                     const newVal = systemSettings.ignore_status === 'true' ? 'false' : 'true';
                     setSystemSettings(prev => ({...prev, ignore_status: newVal}));
@@ -1980,7 +2026,7 @@ function App() {
   </h2>
                         {selectedCustomer.participatingOperators && selectedCustomer.participatingOperators.length > 0 && (
                           <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700 text-emerald-300 font-semibold whitespace-nowrap shrink-0" title={`Atendido por: ${selectedCustomer.participatingOperators.join(', ')}`}>
-                            👥 {selectedCustomer.participatingOperators.join(', ')}
+                            {selectedCustomer.participatingOperators.join(', ').includes('WhatsApp Celular') ? '📱' : '💻'}
                           </span>
                         )}
                       </div>

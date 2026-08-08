@@ -254,6 +254,7 @@ async function initBaileysEngine() {
                 const recentMessages = messages.slice(0, 150);
                 io.emit('sync_progress', { current: 0, total: recentMessages.length });
                 let processed = 0;
+                const triedProfilePictures = new Set();
                 for (const msg of recentMessages) {
                     try {
                         const fromJid = msg.key.remoteJid;
@@ -282,14 +283,31 @@ async function initBaileysEngine() {
                             continue;
                         }
                         let customer = await syncPrisma.customer.findUnique({ where: { externalId: fromPhone } });
+                        let profileUrl = null;
+                        if (!customer || !customer.profilePictureUrl) {
+                            if (!triedProfilePictures.has(fromJid)) {
+                                triedProfilePictures.add(fromJid);
+                                try {
+                                    profileUrl = (await sock?.profilePictureUrl(fromJid, 'image').catch(() => null)) || null;
+                                }
+                                catch (e) { }
+                            }
+                        }
                         if (!customer) {
                             customer = await syncPrisma.customer.create({
                                 data: {
                                     externalId: fromPhone,
                                     channel: 'WHATSAPP',
                                     name: profileName || `Cliente ${fromPhone.slice(-4)}`,
-                                    conversationState: 'PENDING'
+                                    conversationState: 'PENDING',
+                                    profilePictureUrl: profileUrl
                                 }
+                            });
+                        }
+                        else if (profileUrl && !customer.profilePictureUrl) {
+                            customer = await syncPrisma.customer.update({
+                                where: { id: customer.id },
+                                data: { profilePictureUrl: profileUrl }
                             });
                         }
                         const msgDate = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000) : new Date();
@@ -303,6 +321,19 @@ async function initBaileysEngine() {
                                 status: 'READ'
                             }
                         }).catch(() => { });
+                        try {
+                            const updatedCustomer = await syncPrisma.customer.findUnique({
+                                where: { id: customer.id },
+                                include: {
+                                    tags: { include: { tag: true } },
+                                    messages: { orderBy: { createdAt: 'desc' }, take: 1 }
+                                }
+                            });
+                            if (updatedCustomer) {
+                                io.emit('customer_updated', updatedCustomer);
+                            }
+                        }
+                        catch (e) { }
                     }
                     catch (e) {
                         // Ignorar errores individuales
