@@ -114,6 +114,7 @@ export async function initBaileysEngine() {
       logger: pino({ level: 'debug' }, pino.destination(path.join(__dirname, '../../baileys.log'))) as any,
       browser: Browsers.ubuntu('Chrome'),
       generateHighQualityLinkPreview: true,
+      markOnlineOnConnect: false,
       qrTimeout: 120000,
       connectTimeoutMs: 120000,
       defaultQueryTimeoutMs: 120000,
@@ -480,7 +481,7 @@ export async function getPairingCode(phoneNumber: string): Promise<string> {
   if (!sock) throw new Error('Motor de WhatsApp no inicializado.');
   const sanitized = phoneNumber.replace(/[^0-9]/g, '');
   if (sock.authState?.creds?.me?.id) {
-    throw new Error('Ya hay una sesión de WhatsApp conectada.');
+    throw new Error('Ya hay una sesión de WhatsApp guardada. Por favor, haz clic en "Desconectar" primero.');
   }
   await new Promise(resolve => setTimeout(resolve, 1500));
   const code = await sock.requestPairingCode(sanitized);

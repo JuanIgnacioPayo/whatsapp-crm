@@ -2327,7 +2327,7 @@ function App() {
       {/* MODAL VINCULACIÓN CÓDIGO QR WHATSAPP */}
       {showQrModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-waHeader border border-waBorder rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 text-center relative">
+          <div className="bg-waHeader border border-waBorder rounded-2xl p-6 max-w-md w-full max-h-[95vh] overflow-y-auto shadow-2xl space-y-5 text-center relative">
             <button
               onClick={() => setShowQrModal(false)}
               className="absolute top-4 right-4 text-waTextMuted hover:text-waText text-lg font-bold"
