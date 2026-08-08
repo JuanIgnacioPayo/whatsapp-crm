@@ -36,6 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.globalPrisma = void 0;
 exports.loadSystemSettings = loadSystemSettings;
 exports.backupAuthToDb = backupAuthToDb;
 exports.restoreAuthFromDb = restoreAuthFromDb;
@@ -54,6 +55,8 @@ const fs_1 = __importDefault(require("fs"));
 const adm_zip_1 = __importDefault(require("adm-zip"));
 const bot_service_1 = require("./bot.service");
 const socket_service_1 = require("./socket.service");
+exports.globalPrisma = new client_1.PrismaClient();
+let backupInterval = null;
 let sock = null;
 let currentQrDataUrl = null;
 let isConnected = false;
@@ -81,7 +84,7 @@ async function loadSystemSettings() {
             console.error('Error loading system settings:', error);
         }
         finally {
-            await prisma.$disconnect();
+            // await prisma.$disconnect();
         }
     }
     catch (e) {
@@ -206,11 +209,11 @@ async function initBaileysEngine() {
                 else {
                     console.warn('🔒 Sesión cerrada por el usuario. Limpiando credenciales...');
                     try {
-                        const prisma = new (require('@prisma/client').PrismaClient)();
+                        const prisma = exports.globalPrisma;
                         await prisma.baileysSession.deleteMany({
                             where: { sessionId: 'default' }
                         });
-                        await prisma.$disconnect();
+                        // await prisma.$disconnect();
                     }
                     catch (e) {
                         console.error('Error al borrar sesión de DB:', e);
@@ -322,7 +325,7 @@ async function initBaileysEngine() {
         sock.ev.on('contacts.upsert', async (contacts) => {
             console.log(`📚 [BAILEYS QR] Actualizando ${contacts.length} contactos de la agenda...`);
             if (contacts && contacts.length > 0) {
-                const prisma = new (require('@prisma/client').PrismaClient)();
+                const prisma = exports.globalPrisma;
                 for (const contact of contacts) {
                     if (!contact.name)
                         continue;
@@ -370,7 +373,7 @@ async function initBaileysEngine() {
                 }
                 console.log(`📩 [BAILEYS QR] Mensaje entrante de ${fromPhone} (${profileName || 'Anónimo'}): "${incomingText}"`);
                 try {
-                    const prisma = new (require('@prisma/client').PrismaClient)();
+                    const prisma = exports.globalPrisma;
                     let customer = await prisma.customer.findUnique({ where: { externalId: fromPhone } });
                     // Obtener foto y estado si el cliente existe y no los tiene (lazy fetch para no bloquear)
                     if (customer && (!customer.profilePictureUrl || !customer.about)) {

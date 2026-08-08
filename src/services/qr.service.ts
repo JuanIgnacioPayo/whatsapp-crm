@@ -16,6 +16,9 @@ import AdmZip from 'adm-zip';
 import { handleIncomingMessage } from './bot.service';
 import { getIO } from './socket.service';
 
+export const globalPrisma = new PrismaClient();
+let backupInterval: NodeJS.Timeout | null = null;
+
 let sock: WASocket | null = null;
 let currentQrDataUrl: string | null = null;
 let isConnected = false;
@@ -42,7 +45,7 @@ export async function loadSystemSettings() {
     } catch (error) {
       console.error('Error loading system settings:', error);
     } finally {
-      await prisma.$disconnect();
+      // await prisma.$disconnect();
     }
   } catch (e) {
     console.error('⚠️ PrismaClient no disponible para cargar settings, usando valores por defecto.');
@@ -178,11 +181,11 @@ export async function initBaileysEngine() {
         } else {
           console.warn('🔒 Sesión cerrada por el usuario. Limpiando credenciales...');
           try {
-            const prisma = new (require('@prisma/client').PrismaClient)();
+            const prisma = globalPrisma;
             await prisma.baileysSession.deleteMany({
               where: { sessionId: 'default' }
             });
-            await prisma.$disconnect();
+            // await prisma.$disconnect();
           } catch (e) {
             console.error('Error al borrar sesión de DB:', e);
           }
@@ -296,7 +299,7 @@ export async function initBaileysEngine() {
     sock.ev.on('contacts.upsert', async (contacts) => {
       console.log(`📚 [BAILEYS QR] Actualizando ${contacts.length} contactos de la agenda...`);
       if (contacts && contacts.length > 0) {
-        const prisma = new (require('@prisma/client').PrismaClient)();
+        const prisma = globalPrisma;
         for (const contact of contacts) {
           if (!contact.name) continue;
           const phone = contact.id.replace('@s.whatsapp.net', '').replace('@c.us', '').split(':')[0];
@@ -342,7 +345,7 @@ export async function initBaileysEngine() {
         console.log(`📩 [BAILEYS QR] Mensaje entrante de ${fromPhone} (${profileName || 'Anónimo'}): "${incomingText}"`);
 
         try {
-          const prisma = new (require('@prisma/client').PrismaClient)();
+          const prisma = globalPrisma;
           let customer = await prisma.customer.findUnique({ where: { externalId: fromPhone } });
           // Obtener foto y estado si el cliente existe y no los tiene (lazy fetch para no bloquear)
           if (customer && (!customer.profilePictureUrl || !customer.about)) {
