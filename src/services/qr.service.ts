@@ -32,7 +32,7 @@ let systemSettingsCache: Record<string, string> = {
 export async function loadSystemSettings() {
   try {
     const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
+    const prisma = globalPrisma;
     try {
       if (prisma.systemSetting && typeof prisma.systemSetting.findMany === 'function') {
         const settings = await prisma.systemSetting.findMany();
@@ -96,7 +96,7 @@ export async function restoreAuthFromDb(prisma: PrismaClient) {
 export async function initBaileysEngine() {
   await loadSystemSettings();
   try {
-    const prisma = new PrismaClient();
+    const prisma = globalPrisma;
     await restoreAuthFromDb(prisma);
 
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -122,8 +122,8 @@ export async function initBaileysEngine() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Backup to DB every 2 minutes instead of every creds update to prevent CPU/DB overload
-    setInterval(() => {
+    if (backupInterval) clearInterval(backupInterval);
+    backupInterval = setInterval(() => {
       backupAuthToDb(prisma);
     }, 120000);
 
@@ -204,7 +204,7 @@ export async function initBaileysEngine() {
       try {
         const io = getIO();
         const { PrismaClient } = require('@prisma/client');
-        const syncPrisma = new PrismaClient();
+        const syncPrisma = globalPrisma;
         
         if (contacts && contacts.length > 0) {
           for (const contact of contacts) {
@@ -221,7 +221,6 @@ export async function initBaileysEngine() {
 
         if (!messages || messages.length === 0) {
           io.emit('sync_complete', { success: true });
-          await syncPrisma.$disconnect();
           return;
         }
 
@@ -289,7 +288,6 @@ export async function initBaileysEngine() {
         }
         
         io.emit('sync_complete', { success: true });
-        await syncPrisma.$disconnect();
         console.log(`✅ Sincronización del historial reciente completada.`);
       } catch (err) {
         console.error('Error in history sync', err);

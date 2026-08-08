@@ -68,7 +68,7 @@ let systemSettingsCache = {
 async function loadSystemSettings() {
     try {
         const { PrismaClient } = require('@prisma/client');
-        const prisma = new PrismaClient();
+        const prisma = exports.globalPrisma;
         try {
             if (prisma.systemSetting && typeof prisma.systemSetting.findMany === 'function') {
                 const settings = await prisma.systemSetting.findMany();
@@ -133,7 +133,7 @@ async function restoreAuthFromDb(prisma) {
 async function initBaileysEngine() {
     await loadSystemSettings();
     try {
-        const prisma = new client_1.PrismaClient();
+        const prisma = exports.globalPrisma;
         await restoreAuthFromDb(prisma);
         const { state, saveCreds } = await (0, baileys_2.useMultiFileAuthState)(AUTH_DIR);
         const { version } = await (0, baileys_1.fetchLatestBaileysVersion)();
@@ -154,8 +154,9 @@ async function initBaileysEngine() {
             keepAliveIntervalMs: 30000
         });
         sock.ev.on('creds.update', saveCreds);
-        // Backup to DB every 2 minutes instead of every creds update to prevent CPU/DB overload
-        setInterval(() => {
+        if (backupInterval)
+            clearInterval(backupInterval);
+        backupInterval = setInterval(() => {
             backupAuthToDb(prisma);
         }, 120000);
         sock.ev.on('connection.update', async (update) => {
@@ -231,7 +232,7 @@ async function initBaileysEngine() {
             try {
                 const io = (0, socket_service_1.getIO)();
                 const { PrismaClient } = require('@prisma/client');
-                const syncPrisma = new PrismaClient();
+                const syncPrisma = exports.globalPrisma;
                 if (contacts && contacts.length > 0) {
                     for (const contact of contacts) {
                         if (!contact.name)
@@ -248,7 +249,6 @@ async function initBaileysEngine() {
                 }
                 if (!messages || messages.length === 0) {
                     io.emit('sync_complete', { success: true });
-                    await syncPrisma.$disconnect();
                     return;
                 }
                 const recentMessages = messages.slice(0, 150);
@@ -315,7 +315,6 @@ async function initBaileysEngine() {
                     }
                 }
                 io.emit('sync_complete', { success: true });
-                await syncPrisma.$disconnect();
                 console.log(`✅ Sincronización del historial reciente completada.`);
             }
             catch (err) {
