@@ -394,6 +394,7 @@ function App() {
     }
   }, [replyText, quickReplies]);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(null);
   const [isSimulating, setIsSimulating] = useState(false);
   
   // Settings
@@ -693,6 +694,13 @@ function App() {
       fetchCustomers(); // Actualizar la vista de clientes para reflejar cambios en etiquetas
     });
 
+    socket.on('sync_progress', (data) => {
+      setSyncProgress(data);
+    });
+    socket.on('sync_complete', (data) => {
+      setSyncProgress(null);
+      fetchCustomers();
+    });
     socket.on('scheduledMessageSent', (data) => {
       if (data.customerId === selectedCustomerIdRef.current) {
         fetchScheduledMessages(selectedCustomerIdRef.current);

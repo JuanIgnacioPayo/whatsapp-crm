@@ -201,8 +201,7 @@ async function initBaileysEngine() {
                 }
                 catch (e) { }
                 if (shouldReconnect) {
-                    console.log('🔄 Reconectando en 5 segundos...');
-                    setTimeout(initBaileysEngine, 5000);
+                    setTimeout(() => initBaileysEngine(), 3000);
                 }
                 else {
                     console.warn('🔒 Sesión cerrada por el usuario. Limpiando credenciales...');
@@ -226,80 +225,99 @@ async function initBaileysEngine() {
         // Escuchar la sincronización inicial del historial reciente de WhatsApp Web
         sock.ev.on('messaging-history.set', async ({ chats, messages, contacts }) => {
             console.log(`📚 [BAILEYS QR] Sincronizando historial reciente: ${chats?.length || 0} chats, ${messages?.length || 0} mensajes, ${contacts?.length || 0} contactos...`);
-            if (contacts && contacts.length > 0) {
-                const prisma = new (require('@prisma/client').PrismaClient)();
-                for (const contact of contacts) {
-                    if (!contact.name)
-                        continue;
-                    const phone = contact.id.replace('@s.whatsapp.net', '').replace('@c.us', '').split(':')[0];
-                    try {
-                        await prisma.customer.updateMany({
-                            where: { externalId: phone },
-                            data: { name: contact.name }
-                        });
-                    }
-                    catch (e) { }
-                }
-            }
-            if (!messages || messages.length === 0)
-                return;
-            for (const msg of messages) {
-                try {
-                    const fromJid = msg.key.remoteJid;
-                    const ignoreGroups = systemSettingsCache['ignore_groups'] !== 'false';
-                    const ignoreStatus = systemSettingsCache['ignore_status'] !== 'false';
-                    if (!fromJid)
-                        continue;
-                    if (ignoreGroups && fromJid.endsWith('@g.us'))
-                        continue;
-                    if (ignoreStatus && fromJid === 'status@broadcast')
-                        continue;
-                    const fromPhone = fromJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
-                    const isFromMe = msg.key.fromMe;
-                    const profileName = msg.pushName || undefined;
-                    let text = '';
-                    if (msg.message?.conversation) {
-                        text = msg.message.conversation;
-                    }
-                    else if (msg.message?.extendedTextMessage?.text) {
-                        text = msg.message.extendedTextMessage.text;
-                    }
-                    else if (msg.message?.imageMessage?.caption) {
-                        text = msg.message.imageMessage.caption || '📷 Imagen recibida';
-                    }
-                    else {
-                        continue;
-                    }
-                    const prisma = new (require('@prisma/client').PrismaClient)();
-                    let customer = await prisma.customer.findUnique({ where: { externalId: fromPhone } });
-                    if (!customer) {
-                        customer = await prisma.customer.create({
-                            data: {
-                                externalId: fromPhone,
-                                channel: 'WHATSAPP',
-                                name: profileName || `Cliente ${fromPhone.slice(-4)}`,
-                                conversationState: 'PENDING'
-                            }
-                        });
-                    }
-                    const msgDate = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000) : new Date();
-                    await prisma.message.create({
-                        data: {
-                            customerId: customer.id,
-                            senderType: isFromMe ? 'OPERATOR' : 'CUSTOMER',
-                            operatorName: isFromMe ? 'WhatsApp Celular' : undefined,
-                            text,
-                            createdAt: msgDate,
-                            status: 'READ'
+            try {
+                const io = (0, socket_service_1.getIO)();
+                const { PrismaClient } = require('@prisma/client');
+                const syncPrisma = new PrismaClient();
+                if (contacts && contacts.length > 0) {
+                    for (const contact of contacts) {
+                        if (!contact.name)
+                            continue;
+                        const phone = contact.id.replace('@s.whatsapp.net', '').replace('@c.us', '').split(':')[0];
+                        try {
+                            await syncPrisma.customer.updateMany({
+                                where: { externalId: phone },
+                                data: { name: contact.name }
+                            });
                         }
-                    }).catch(() => { });
-                    await prisma.$disconnect();
+                        catch (e) { }
+                    }
                 }
-                catch (e) {
-                    // Ignorar errores individuales en el bucle de sincronización
+                if (!messages || messages.length === 0) {
+                    io.emit('sync_complete', { success: true });
+                    await syncPrisma.$disconnect();
+                    return;
                 }
+                const recentMessages = messages.slice(0, 150);
+                io.emit('sync_progress', { current: 0, total: recentMessages.length });
+                let processed = 0;
+                for (const msg of recentMessages) {
+                    try {
+                        const fromJid = msg.key.remoteJid;
+                        const ignoreGroups = systemSettingsCache['ignore_groups'] !== 'false';
+                        const ignoreStatus = systemSettingsCache['ignore_status'] !== 'false';
+                        if (!fromJid)
+                            continue;
+                        if (ignoreGroups && fromJid.endsWith('@g.us'))
+                            continue;
+                        if (ignoreStatus && fromJid === 'status@broadcast')
+                            continue;
+                        const fromPhone = fromJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                        const isFromMe = msg.key.fromMe;
+                        const profileName = msg.pushName || undefined;
+                        let text = '';
+                        if (msg.message?.conversation) {
+                            text = msg.message.conversation;
+                        }
+                        else if (msg.message?.extendedTextMessage?.text) {
+                            text = msg.message.extendedTextMessage.text;
+                        }
+                        else if (msg.message?.imageMessage?.caption) {
+                            text = msg.message.imageMessage.caption || '📷 Imagen recibida';
+                        }
+                        else {
+                            continue;
+                        }
+                        let customer = await syncPrisma.customer.findUnique({ where: { externalId: fromPhone } });
+                        if (!customer) {
+                            customer = await syncPrisma.customer.create({
+                                data: {
+                                    externalId: fromPhone,
+                                    channel: 'WHATSAPP',
+                                    name: profileName || `Cliente ${fromPhone.slice(-4)}`,
+                                    conversationState: 'PENDING'
+                                }
+                            });
+                        }
+                        const msgDate = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000) : new Date();
+                        await syncPrisma.message.create({
+                            data: {
+                                customerId: customer.id,
+                                senderType: isFromMe ? 'OPERATOR' : 'CUSTOMER',
+                                operatorName: isFromMe ? 'WhatsApp Celular' : undefined,
+                                text,
+                                createdAt: msgDate,
+                                status: 'READ'
+                            }
+                        }).catch(() => { });
+                    }
+                    catch (e) {
+                        // Ignorar errores individuales
+                    }
+                    finally {
+                        processed++;
+                        if (processed % 10 === 0 || processed === recentMessages.length) {
+                            io.emit('sync_progress', { current: processed, total: recentMessages.length });
+                        }
+                    }
+                }
+                io.emit('sync_complete', { success: true });
+                await syncPrisma.$disconnect();
+                console.log(`✅ Sincronización del historial reciente completada.`);
             }
-            console.log(`✅ Sincronización del historial reciente completada.`);
+            catch (err) {
+                console.error('Error in history sync', err);
+            }
         });
         sock.ev.on('contacts.upsert', async (contacts) => {
             console.log(`📚 [BAILEYS QR] Actualizando ${contacts.length} contactos de la agenda...`);
