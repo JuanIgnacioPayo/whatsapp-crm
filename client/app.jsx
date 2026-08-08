@@ -421,6 +421,8 @@ function App() {
   const [isPairingLoading, setIsPairingLoading] = useState(false);
 
   const [isQrConnected, setIsQrConnected] = useState(false);
+  const [isQrScanned, setIsQrScanned] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [connectedExternalId, setConnectedExternalId] = useState(null);
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(60);
@@ -658,16 +660,24 @@ function App() {
     socket.on('disconnect', () => setIsSocketConnected(false));
 
     socket.on('qr_code', (data) => {
+      setIsQrScanned(false);
       setQrCodeData(data.qr);
       setIsQrConnected(data.connected);
       setQrSecondsLeft(data.ttl || 60);
     });
 
+    socket.on('qr_scanned', () => {
+      setIsQrScanned(true);
+    });
+
     socket.on('whatsapp_status', (data) => {
       setIsQrConnected(data.connected);
+      if (!data.connected) setIsQrScanned(false);
       if (data.connected) {
         setQrCodeData(null);
         setShowQrModal(false);
+        setIsQrScanned(false);
+        setIsSyncing(true);
         if (data.externalId) setConnectedExternalId(data.externalId);
         // Cargar chats al conectar WhatsApp
         if (user) {
@@ -678,7 +688,7 @@ function App() {
           window.Swal.fire({
             icon: 'success',
             title: '¡Conexión Exitosa!',
-            text: 'La sesión de WhatsApp se ha vinculado correctamente. Ya puedes cerrar esta ventana o continuar con tus tareas.',
+            text: 'La sesión de WhatsApp se ha vinculado correctamente. Los chats comenzarán a sincronizarse en breve.',
             confirmButtonColor: '#10b981'
           });
         }
@@ -695,9 +705,11 @@ function App() {
     });
 
     socket.on('sync_progress', (data) => {
+      setIsSyncing(true);
       setSyncProgress(data);
     });
     socket.on('sync_complete', (data) => {
+      setIsSyncing(false);
       setSyncProgress(null);
       fetchCustomers();
     });
@@ -1652,16 +1664,16 @@ function App() {
                         </div>
                         <div>
                           <p className="font-semibold text-waText">{u.displayName}</p>
-                          <span className="text-[10px] text-gray-500">Reg: {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/D'}</span>
+                          <span className="text-[10px] text-waTextMuted">Reg: {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/D'}</span>
                         </div>
                       </td>
-                      <td className="p-4 text-gray-300">{u.email}</td>
+                      <td className="p-4 text-waText">{u.email}</td>
                       <td className="p-4">
                         <select
                           value={u.role}
                           disabled={u.uid === user.uid}
                           onChange={(e) => handleUpdateUserRole(u.uid, e.target.value)}
-                          className="bg-gray-900 text-waText border border-gray-700 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-50"
+                          className="bg-waHeader text-waText border border-waBorder rounded px-2.5 py-1 text-xs focus:outline-none focus:border-waAccent cursor-pointer disabled:opacity-50"
                         >
                           <option value="operator">Operador (operator)</option>
                           <option value="admin">Administrador (admin)</option>
@@ -1708,9 +1720,13 @@ function App() {
             {/* CABECERA ESTILO WHATSAPP (Panel Izquierdo) */}
             <header className="h-16 bg-waHeader flex items-center justify-between px-4 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-waBorder flex items-center justify-center font-bold text-waText uppercase">
+                <button 
+                  onClick={handleSignOut} 
+                  title="Cerrar Sesión del CRM"
+                  className="w-10 h-10 rounded-full bg-waBorder flex items-center justify-center font-bold text-waText uppercase hover:opacity-80 transition cursor-pointer shadow-sm hover:ring-2 hover:ring-red-500/50"
+                >
                   {userProfile?.displayName ? userProfile.displayName.charAt(0) : 'U'}
-                </div>
+                </button>
               </div>
               <div className="flex items-center gap-4 text-waTextMuted">
                 <button 
@@ -1785,7 +1801,7 @@ function App() {
                 </button>
                 
                 {isQrConnected ? (
-                  <button title="WhatsApp Vinculado" className="text-emerald-500"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></button>
+                  <button onClick={handleDisconnectWhatsApp} title="Desconectar WhatsApp" className="text-emerald-500 hover:text-red-500 transition"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></button>
                 ) : (
                   <button onClick={() => setShowQrModal(true)} title="Vincular WhatsApp" className="text-amber-500 animate-pulse"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 16H7V5h10v14z"></path></svg></button>
                 )}
@@ -1836,26 +1852,7 @@ function App() {
                         {systemSettings.theme === 'dark' ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
                       </button>
                       
-                      {userProfile?.role === 'admin' && (
-                        <>
-                          <div className="border-t border-gray-700/50 my-1"></div>
-                          <button 
-                            onClick={handleDisconnectWhatsApp}
-                            className="w-full text-left px-4 py-2 hover:bg-red-900/40 text-red-400 transition flex items-center gap-2"
-                          >
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
-                            {isQrConnected ? 'Desconectar WhatsApp' : 'Limpiar Chats (Desconectado)'}
-                          </button>
-                        </>
-                      )}
-                      
-                      <div className="border-t border-gray-700/50 my-1"></div>
-                      <button 
-                        onClick={handleSignOut}
-                        className="w-full text-left px-4 py-2 hover:bg-waDark text-waText transition flex items-center gap-2"
-                      >
-                        🚪 Cerrar Sesión del CRM
-                      </button>
+
                     </div>
                   )}
                 </div>
@@ -1895,20 +1892,29 @@ function App() {
 
             {/* Lista de Conversaciones */}
             <div className="flex-1 overflow-y-auto divide-y divide-waBorder">
-              {isLoadingChats ? (
+              {isLoadingChats || isSyncing ? (
                 <div className="flex flex-col items-center justify-center py-16 space-y-4">
                   <div className="relative">
                     <div className="w-12 h-12 border-4 border-waAccent/20 rounded-full"></div>
                     <div className="w-12 h-12 border-4 border-waAccent border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
                   </div>
                   <div className="text-center space-y-1">
-                    <p className="text-sm font-semibold text-waText">Sincronizando chats...</p>
-                    <p className="text-[11px] text-waTextMuted">Cargando conversaciones de WhatsApp</p>
-                  </div>
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-waAccent rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
-                    <div className="w-2 h-2 bg-waAccent rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
-                    <div className="w-2 h-2 bg-waAccent rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                    <p className="text-sm font-semibold text-waText">
+                      {isSyncing ? 'Sincronizando WhatsApp...' : 'Cargando chats...'}
+                    </p>
+                    <p className="text-[11px] text-waTextMuted">
+                      {syncProgress 
+                        ? `Descargando ${syncProgress.current} de ${syncProgress.total} mensajes` 
+                        : 'Esto puede tomar unos segundos...'}
+                    </p>
+                    {syncProgress && syncProgress.total > 0 && (
+                      <div className="w-48 h-1.5 bg-waDark rounded-full overflow-hidden mt-3 mx-auto border border-waBorder">
+                        <div 
+                          className="h-full bg-waAccent transition-all duration-300"
+                          style={{ width: `${(syncProgress.current / syncProgress.total) * 100}%` }}
+                        ></div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : filteredCustomers.length === 0 ? (
@@ -2353,6 +2359,12 @@ function App() {
                 <p className="text-xs text-waText">
                   Tu número {connectedExternalId && <strong>+{connectedExternalId}</strong>} ya está enlazado. Todos tus operadores pueden chatear libremente.
                 </p>
+              </div>
+            ) : isQrScanned ? (
+              <div className="p-8 space-y-3">
+                <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mx-auto"></div>
+                <h4 className="font-bold text-sm text-emerald-300">Vinculando dispositivo...</h4>
+                <p className="text-xs text-waTextMuted">Se detectó el código QR. Estableciendo conexión segura con WhatsApp.</p>
               </div>
             ) : qrCodeData ? (
               <div className="space-y-4">

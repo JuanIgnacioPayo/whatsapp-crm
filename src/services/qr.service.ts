@@ -147,6 +147,13 @@ export async function initBaileysEngine() {
         }
       }
 
+      if (connection === 'connecting') {
+        try {
+          const io = getIO();
+          io.emit('qr_scanned', { connecting: true });
+        } catch(e) {}
+      }
+
       if (connection === 'open') {
         console.log('✅ ¡WhatsApp vinculado y conectado por Código QR exitosamente!');
         isConnected = true;
