@@ -143,7 +143,7 @@ async function initBaileysEngine() {
             },
             printQRInTerminal: true,
             logger: (0, pino_1.default)({ level: 'debug' }, pino_1.default.destination(path_1.default.join(__dirname, '../../baileys.log'))),
-            browser: baileys_1.Browsers.macOS('Desktop'),
+            browser: baileys_1.Browsers.ubuntu('Chrome'),
             generateHighQualityLinkPreview: true,
             qrTimeout: 120000,
             connectTimeoutMs: 120000,
@@ -201,7 +201,8 @@ async function initBaileysEngine() {
                 }
                 catch (e) { }
                 if (shouldReconnect) {
-                    setTimeout(() => initBaileysEngine(), 3000);
+                    console.log('🔄 Reconectando en 5 segundos...');
+                    setTimeout(initBaileysEngine, 5000);
                 }
                 else {
                     console.warn('🔒 Sesión cerrada por el usuario. Limpiando credenciales...');
